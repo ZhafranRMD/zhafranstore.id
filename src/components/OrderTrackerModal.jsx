@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { X, Search, ShoppingBag, Clock, CheckCircle2, AlertCircle, RefreshCw, MessageCircle } from 'lucide-react';
+import { X, Search, ShoppingBag, Clock, CheckCircle2, AlertCircle, RefreshCw, MessageCircle, MessageSquare } from 'lucide-react';
 import { storeService } from '../services/storeService.js';
 
-export default function OrderTrackerModal({ isOpen, onClose, storeSettings }) {
+export default function OrderTrackerModal({ isOpen, onClose, storeSettings, onOpenChat }) {
   if (!isOpen) return null;
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,16 +143,31 @@ export default function OrderTrackerModal({ isOpen, onClose, storeSettings }) {
                         </div>
                       )}
 
-                      <button
-                        onClick={() => {
-                          const msg = `Halo Admin, saya ingin menanyakan status pesanan invoice ${order.id}.`;
-                          window.open(storeService.generateWhatsAppLink(adminWhatsApp, msg), '_blank');
-                        }}
-                        className="w-full btn-secondary text-xs py-2 flex items-center justify-center gap-1.5"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Tanyakan ke WhatsApp Admin</span>
-                      </button>
+                      <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                        {onOpenChat && (
+                          <button
+                            onClick={() => {
+                              onOpenChat(order);
+                              onClose();
+                            }}
+                            className="flex-1 btn-primary text-xs py-2 flex items-center justify-center gap-1.5 font-bold"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-slate-950" />
+                            <span>Buka Ruang Chat & Unduh Aplikasi</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            const msg = `Halo Admin, saya ingin menanyakan status pesanan invoice ${order.id}.`;
+                            window.open(storeService.generateWhatsAppLink(adminWhatsApp, msg), '_blank');
+                          }}
+                          className="btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Tanya WA</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

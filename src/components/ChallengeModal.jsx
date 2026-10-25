@@ -294,6 +294,21 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                 )}
               </div>
 
+              {/* SYARAT VERIFIKASI: VIDEO PENGALAMAN MEMBELI */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-violet-950/60 via-slate-900 to-cyan-950/60 border border-violet-500/40 space-y-2.5">
+                <div className="flex items-center gap-2 text-violet-300 font-heading font-black text-xs sm:text-sm">
+                  <Video className="w-4 h-4 text-violet-400" />
+                  <span>Syarat Mutlak Terverifikasi: Video Pengalaman Membeli di Zhafranstore.id</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Agar klaim kamu <strong>bisa terverifikasi</strong> oleh Admin, kamu wajib membuat video tentang <strong>pengalaman membeli di Zhafranstore.id</strong> (ulasan kecepatan proses 1-5 menit, unboxing lisensi/item, atau gameplay dengan item game yang kamu beli).
+                </p>
+                <div className="text-[11px] text-cyan-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Sertakan tagar <strong>#zhafranstore #zhafranstoreid</strong> dan cantumkan kode unik bio di bawah.</span>
+                </div>
+              </div>
+
               {/* STEP 1: KODE UNIK BIO */}
               <div className="p-4 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

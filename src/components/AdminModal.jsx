@@ -28,7 +28,8 @@ import {
   Tag,
   Gift,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  MessageSquare
 } from 'lucide-react';
 import { storeService } from '../services/storeService.js';
 import { validAdminCodes } from '../data/promoCodes.js';
@@ -40,6 +41,7 @@ export default function AdminModal({
   onProductsUpdated, 
   storeSettings, 
   onSettingsUpdated,
+  onOpenOrderChat,
   showToast 
 }) {
   if (!isOpen) return null;
@@ -658,6 +660,18 @@ export default function AdminModal({
                               >
                                 <Eye className="w-3.5 h-3.5 text-cyan-400" />
                                 <span>Bukti</span>
+                              </button>
+                            )}
+
+                            {/* BUKA RUANG CHAT & SERAH TERIMA APLIKASI */}
+                            {onOpenOrderChat && (
+                              <button
+                                onClick={() => onOpenOrderChat(order)}
+                                className="btn-primary text-xs py-1.5 px-2.5 flex items-center gap-1 rounded-lg"
+                                title="Buka Ruang Chat & Serah Terima Aplikasi ke Pembeli"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 text-slate-950" />
+                                <span>Chat & Kirim Aplikasi</span>
                               </button>
                             )}
 

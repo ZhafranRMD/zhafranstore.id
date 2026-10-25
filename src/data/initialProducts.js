@@ -3,7 +3,8 @@ export const initialStoreSettings = {
   store_name: "Zhafranstore.id",
   store_tagline: "Pusat Game & Item Gamepass Instan Terpercaya #1",
   qris_image_url: "/qris-zhafranstore.jpg",
-  admin_whatsapp: "6282199887766",
+  admin_whatsapp: "082542778554",
+  admin_email: "zhafran.gibran09@gmail.com",
   payment_instructions: "1. Scan kode QRIS menggunakan GoPay, OVO, DANA, BCA, ShopeePay, atau Bank apa saja.\n2. Pastikan nominal transfer sesuai dengan total tagihan.\n3. Simpan dan unggah bukti transfer, lalu klik 'Konfirmasi WhatsApp' untuk pemrosesan kilat 1-5 menit."
 };
 

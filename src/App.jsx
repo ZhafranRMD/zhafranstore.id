@@ -7,6 +7,8 @@ import CheckoutModal from './components/CheckoutModal.jsx';
 import AdminModal from './components/AdminModal.jsx';
 import OrderTrackerModal from './components/OrderTrackerModal.jsx';
 import ChallengeModal from './components/ChallengeModal.jsx';
+import OrderChatModal from './components/OrderChatModal.jsx';
+import HelpModal from './components/HelpModal.jsx';
 import Toast from './components/Toast.jsx';
 import { storeService } from './services/storeService.js';
 import { initialProducts, initialStoreSettings } from './data/initialProducts.js';
@@ -18,7 +20,9 @@ import {
   Sparkles, 
   Heart, 
   Layers,
-  ArrowUp
+  ArrowUp,
+  HelpCircle,
+  MessageSquare
 } from 'lucide-react';
 
 export default function App() {
@@ -53,6 +57,11 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
   const [isChallengeOpen, setIsChallengeOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  // Order Chat Room & App Delivery
+  const [activeChatOrder, setActiveChatOrder] = useState(null);
+  const [isChatAdmin, setIsChatAdmin] = useState(false);
 
   // Toast
   const [toastMessage, setToastMessage] = useState('');
@@ -140,6 +149,7 @@ export default function App() {
         onOpenAdmin={() => setIsAdminOpen(true)}
         onOpenTracker={() => setIsTrackerOpen(true)}
         onOpenChallenge={() => setIsChallengeOpen(true)}
+        onOpenHelp={() => setIsHelpOpen(true)}
         storeSettings={storeSettings}
       />
 
@@ -191,20 +201,15 @@ export default function App() {
 
       </main>
 
-      {/* Floating Action: Quick WhatsApp Admin Help */}
-      <div className="fixed bottom-6 left-6 z-40 hidden sm:block">
-        <a
-          href={storeService.generateWhatsAppLink(
-            storeSettings?.admin_whatsapp,
-            "Halo Admin Zhafranstore.id, saya ingin bertanya seputar produk game/gamepass."
-          )}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-xl shadow-emerald-500/30 transition hover:scale-105"
+      {/* Floating Action: Quick Admin Help Hub */}
+      <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2">
+        <button
+          onClick={() => setIsHelpOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-heading font-black text-xs shadow-xl shadow-emerald-500/30 transition hover:scale-105"
         >
-          <MessageCircle className="w-4 h-4" />
-          <span>Chat Admin WA</span>
-        </a>
+          <HelpCircle className="w-4 h-4" />
+          <span>Tanya Admin & Bantuan</span>
+        </button>
       </div>
 
       {/* Floating Scroll to Top */}
@@ -240,7 +245,7 @@ export default function App() {
           <div>
             <div className="font-heading font-bold text-white text-sm mb-3">Metode Pembayaran</div>
             <ul className="space-y-1.5 text-xs text-slate-400">
-              <li>• QRIS Instan (BCA, Mandiri, BRI, BNI)</li>
+              <li>• QRIS Instan (+ Biaya Rp 500)</li>
               <li>• E-Wallet (GoPay, OVO, DANA, ShopeePay)</li>
               <li>• Shopee (Toko Resmi Zhafranstore)</li>
               <li>• Tokopedia & TikTok Shop</li>
@@ -248,12 +253,20 @@ export default function App() {
           </div>
 
           <div>
-            <div className="font-heading font-bold text-white text-sm mb-3">Keamanan & Bantuan</div>
+            <div className="font-heading font-bold text-white text-sm mb-3">Kontak Admin & Bantuan</div>
             <ul className="space-y-1.5 text-xs text-slate-400">
-              <li>• 100% Legal & Anti Rollback</li>
-              <li>• Pengiriman Otomatis 1-5 Menit</li>
-              <li>• WhatsApp: {storeSettings?.admin_whatsapp || "6282199887766"}</li>
+              <li>• WhatsApp: <strong>082542778554</strong></li>
+              <li>• Email: <strong>zhafran.gibran09@gmail.com</strong></li>
+              <li>• Layanan Tanya Permasalahan 24/7</li>
               <li>
+                <button 
+                  onClick={() => setIsHelpOpen(true)}
+                  className="text-emerald-400 hover:underline font-bold"
+                >
+                  Buka Pusat Bantuan Admin
+                </button>
+              </li>
+              <li className="pt-1">
                 <button 
                   onClick={() => setIsAdminOpen(true)} 
                   className="text-violet-400 hover:underline inline-flex items-center gap-1"
@@ -276,6 +289,10 @@ export default function App() {
         onOrderSuccess={(order) => {
           showToast(`Pesanan ${order.id} berhasil dibuat!`);
         }}
+        onOpenChat={(order) => {
+          setActiveChatOrder(order);
+          setIsChatAdmin(false);
+        }}
       />
 
       {/* Admin Panel Modal */}
@@ -286,6 +303,10 @@ export default function App() {
         onProductsUpdated={loadData}
         storeSettings={storeSettings}
         onSettingsUpdated={(newSettings) => setStoreSettings(newSettings)}
+        onOpenOrderChat={(order) => {
+          setActiveChatOrder(order);
+          setIsChatAdmin(true);
+        }}
         showToast={showToast}
       />
 
@@ -294,14 +315,42 @@ export default function App() {
         isOpen={isTrackerOpen}
         onClose={() => setIsTrackerOpen(false)}
         storeSettings={storeSettings}
+        onOpenChat={(order) => {
+          setActiveChatOrder(order);
+          setIsChatAdmin(false);
+        }}
       />
 
-      {/* Challenge 1K Views & Hadiah Modal */}
+      {/* Challenge 1K Views, Hadiah & Verifikasi Video Modal */}
       <ChallengeModal
         isOpen={isChallengeOpen}
         onClose={() => setIsChallengeOpen(false)}
         storeSettings={storeSettings}
         showToast={showToast}
+      />
+
+      {/* Order Chat Room & Application Delivery Modal */}
+      <OrderChatModal
+        order={activeChatOrder}
+        isOpen={!!activeChatOrder}
+        onClose={() => setActiveChatOrder(null)}
+        isAdmin={isChatAdmin}
+        storeSettings={storeSettings}
+        showToast={showToast}
+      />
+
+      {/* Help & Tanya Admin Modal */}
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        storeSettings={storeSettings}
+        onOpenLatestChat={() => {
+          if (activeChatOrder) {
+            setActiveChatOrder(activeChatOrder);
+          } else {
+            setIsTrackerOpen(true);
+          }
+        }}
       />
 
       {/* Toast Notification */}

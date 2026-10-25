@@ -19,7 +19,8 @@ const LOCAL_STORAGE_KEYS = {
   SETTINGS: "zhafranstore_settings",
   ORDERS: "zhafranstore_orders",
   CHALLENGES: "zhafranstore_challenges",
-  EVENTS: "zhafranstore_events"
+  EVENTS: "zhafranstore_events",
+  CHATS: "zhafranstore_order_chats"
 };
 
 // Helper: safe local storage read
@@ -62,6 +63,12 @@ export const storeService = {
       cleanPhone = "62" + cleanPhone;
     }
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  },
+
+  // Generate Email Direct Link
+  generateEmailLink(email, subject, body) {
+    const targetEmail = email || "zhafran.gibran09@gmail.com";
+    return `mailto:${targetEmail}?subject=${encodeURIComponent(subject || 'Tanya Admin Zhafranstore.id')}&body=${encodeURIComponent(body || '')}`;
   },
 
   // 1. PRODUCTS MANAGEMENT
@@ -437,5 +444,67 @@ export const storeService = {
       console.warn("Firestore deleteEvent error:", err.message);
     }
     return true;
+  },
+
+  // 6. ORDER CHAT & APPLICATION DELIVERY (TEMPAT CHAT SETELAH BAYAR)
+  async getOrderMessages(orderId) {
+    const allChats = getLocalData(LOCAL_STORAGE_KEYS.CHATS, {});
+    let messages = allChats[orderId] || [];
+
+    try {
+      const colRef = getAppCollection(`order_chats_${orderId}`);
+      const q = query(colRef, orderBy("createdAt", "asc"), limit(100));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        allChats[orderId] = messages;
+        setLocalData(LOCAL_STORAGE_KEYS.CHATS, allChats);
+      }
+    } catch (err) {
+      console.warn("Firestore getOrderMessages fallback:", err.message);
+    }
+
+    return messages;
+  },
+
+  async sendOrderMessage(orderId, messagePayload) {
+    const msgId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+    const newMsg = {
+      ...messagePayload,
+      id: msgId,
+      createdAt: new Date().toISOString()
+    };
+
+    const allChats = getLocalData(LOCAL_STORAGE_KEYS.CHATS, {});
+    if (!allChats[orderId]) allChats[orderId] = [];
+    allChats[orderId].push(newMsg);
+    setLocalData(LOCAL_STORAGE_KEYS.CHATS, allChats);
+
+    try {
+      const docRef = getAppDoc(`order_chats_${orderId}`, msgId);
+      await setDoc(docRef, { ...newMsg, createdAt: serverTimestamp() });
+    } catch (err) {
+      console.warn("Firestore sendOrderMessage error:", err.message);
+    }
+
+    return newMsg;
+  },
+
+  async deliverApplication(orderId, deliveryDetails) {
+    // Admin delivers the application / credentials to the buyer
+    const deliveryMessage = {
+      sender: "admin",
+      sender_name: "Admin Zhafranstore",
+      text: deliveryDetails.message || "Halo kak, berikut ini aplikasi / akun game yang telah kamu beli:",
+      app_link: deliveryDetails.app_link || "",
+      app_name: deliveryDetails.app_name || "",
+      credentials: deliveryDetails.credentials || "",
+      is_delivery: true,
+      createdAt: new Date().toISOString()
+    };
+
+    await this.sendOrderMessage(orderId, deliveryMessage);
+    await this.updateOrderStatus(orderId, "selesai");
+    return deliveryMessage;
   }
 };

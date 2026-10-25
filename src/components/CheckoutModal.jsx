@@ -20,7 +20,8 @@ import {
   Tag,
   Percent,
   CheckCheck,
-  Sparkles
+  Sparkles,
+  MessageSquare
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { storeService, ADMIN_FEE } from '../services/storeService.js';
@@ -31,7 +32,8 @@ export default function CheckoutModal({
   isOpen, 
   onClose, 
   storeSettings,
-  onOrderSuccess 
+  onOrderSuccess,
+  onOpenChat
 }) {
   if (!isOpen || !product) return null;
 
@@ -364,6 +366,21 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
               </div>
 
               <div className="space-y-2 pt-2">
+                {/* TOMBOL UTAMA: MASUK KE RUANG CHAT & SERAH TERIMA APLIKASI */}
+                {onOpenChat && (
+                  <button
+                    onClick={() => {
+                      onOpenChat(createdOrder);
+                      onClose();
+                    }}
+                    className="w-full btn-primary py-3.5 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-heading font-black shadow-lg shadow-cyan-500/30"
+                  >
+                    <MessageSquare className="w-4 h-4 text-slate-950" />
+                    <span>Masuk ke Ruang Chat & Serah Terima Aplikasi</span>
+                    <Sparkles className="w-4 h-4 text-slate-950" />
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     const waMessage = `Halo Admin Zhafranstore.id, saya ingin konfirmasi pesanan invoice ${createdOrder.id} (${product.name}).`;
@@ -372,7 +389,7 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
                   className="w-full btn-whatsapp py-3 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  Chat / Konfirmasi Ulang ke WhatsApp Admin
+                  Chat Admin WhatsApp (082542778554)
                 </button>
 
                 <button
