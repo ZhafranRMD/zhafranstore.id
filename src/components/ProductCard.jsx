@@ -4,7 +4,6 @@ import { storeService } from '../services/storeService.js';
 
 export default function ProductCard({ product, onCheckout, isFullView = false }) {
   const isGamepass = product.category === 'gamepass';
-  const hasMarketplace = product.shopee_url || product.tiktok_url || product.tokopedia_url;
 
   return (
     <div className={`group relative flex flex-col rounded-2xl bg-slate-900/85 border border-white/10 hover:border-cyan-400/40 hover:bg-slate-850/90 transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-500/15 overflow-hidden ${
@@ -90,30 +89,6 @@ export default function ProductCard({ product, onCheckout, isFullView = false })
           }`}>
             {product.description || "Top up instan otomatis tanpa antre langsung masuk ke akun kamu."}
           </p>
-
-          {/* Marketplace Availability Indicators */}
-          {hasMarketplace && (
-            <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
-              <span>Bisa di:</span>
-              <div className="flex items-center gap-1.5">
-                {product.shopee_url && (
-                  <span className="px-2 py-0.5 rounded-md bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold text-[10px]">
-                    Shopee
-                  </span>
-                )}
-                {product.tokopedia_url && (
-                  <span className="px-2 py-0.5 rounded-md bg-green-500/20 text-green-400 border border-green-500/30 font-bold text-[10px]">
-                    Tokopedia
-                  </span>
-                )}
-                {product.tiktok_url && (
-                  <span className="px-2 py-0.5 rounded-md bg-pink-500/20 text-pink-400 border border-pink-500/30 font-bold text-[10px]">
-                    TikTok
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Price & Action Button (FR-02) */}

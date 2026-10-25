@@ -27,16 +27,32 @@ export const promoCodes = {
   }
 };
 
+export const OWNER_THEBEST_CODE = "ownerthebest";
+
 export const validAdminCodes = [
   "zhafranstoreindonesia",
   "indonesiastore",
   "konhacestore",
   "capiy142owner",
-  "4storezhafran"
+  "4storezhafran",
+  "kepemilikan"
 ];
+
+export function getAuthRole(inputCode) {
+  if (!inputCode) return null;
+  const clean = inputCode.trim().toLowerCase();
+  if (clean === OWNER_THEBEST_CODE) {
+    return 'owner_thebest';
+  }
+  if (validAdminCodes.includes(clean)) {
+    return 'admin_kepemilikan';
+  }
+  return null;
+}
 
 export function validatePromo(code) {
   if (!code) return null;
   const clean = code.trim().toLowerCase();
   return promoCodes[clean] || promoCodes[code.trim()] || null;
 }
+

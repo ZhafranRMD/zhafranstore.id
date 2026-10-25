@@ -25,7 +25,7 @@ export default function HeroBanner({ onSelectCategory }) {
           </h2>
 
           <p className="mt-3 text-sm sm:text-base text-slate-300 leading-relaxed">
-            Pusat produk digital Roblox Blox Fruits, Mobile Legends, Free Fire, Valorant, hingga lisensi Game PC Original. Bayar langsung pakai <strong>QRIS Semua Bank / E-Wallet</strong> atau lewat <strong>Shopee, Tokopedia, dan TikTok Shop</strong>.
+            Pusat produk digital Roblox Blox Fruits, Mobile Legends, Free Fire, Valorant, hingga lisensi Game PC Original. Bayar langsung pakai <strong>QRIS Semua Bank & E-Wallet</strong> dengan konfirmasi kilat otomatis.
           </p>
 
           {/* Quick CTA buttons */}
@@ -77,8 +77,8 @@ export default function HeroBanner({ onSelectCategory }) {
             <div className="w-9 h-9 rounded-lg bg-violet-500/20 text-violet-400 flex items-center justify-center">
               <CheckCircle2 className="w-5 h-5" />
             </div>
-            <div className="font-heading font-bold text-white text-sm sm:text-base">Marketplace</div>
-            <div className="text-xs text-slate-400">Bisa checkout di Shopee, Tokopedia, TikTok</div>
+            <div className="font-heading font-bold text-white text-sm sm:text-base">CS Siaga 24/7</div>
+            <div className="text-xs text-slate-400">Dukungan live chat dan WhatsApp langsung</div>
           </div>
 
         </div>

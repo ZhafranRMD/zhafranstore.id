@@ -11,7 +11,7 @@ import OrderChatModal from './components/OrderChatModal.jsx';
 import HelpModal from './components/HelpModal.jsx';
 import Toast from './components/Toast.jsx';
 import { storeService } from './services/storeService.js';
-import { initialProducts, initialStoreSettings } from './data/initialProducts.js';
+import { initialProducts, initialStoreSettings, initialCategories } from './data/initialProducts.js';
 import { 
   Gamepad2, 
   ShieldCheck, 
@@ -36,6 +36,14 @@ export default function App() {
     }
   });
 
+  const [categories, setCategories] = useState(() => {
+    try {
+      return storeService.getCategories();
+    } catch {
+      return initialCategories;
+    }
+  });
+
   const [storeSettings, setStoreSettings] = useState(() => {
     try {
       const cached = localStorage.getItem('zhafranstore_settings');
@@ -48,9 +56,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   // Filter & Search States
-  const [activeCategory, setActiveCategory] = useState('all'); // 'all' | 'game' | 'gamepass'
+  const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('popular'); // 'popular' | 'price_low' | 'price_high' | 'name_asc'
+  const [sortBy, setSortBy] = useState('popular');
 
   // Modals
   const [checkoutProduct, setCheckoutProduct] = useState(null);
@@ -86,6 +94,8 @@ export default function App() {
       ]);
       if (prods && prods.length > 0) setProducts(prods);
       if (settings) setStoreSettings(settings);
+      const cats = storeService.getCategories();
+      if (cats && cats.length > 0) setCategories(cats);
     } catch (e) {
       console.warn("Background sync note:", e);
     }
@@ -126,14 +136,14 @@ export default function App() {
     return result;
   }, [products, activeCategory, searchQuery, sortBy]);
 
-  // Product Counts
+  // Product Counts (Dynamic across all categories)
   const counts = useMemo(() => {
-    return {
-      all: products.length,
-      gamepass: products.filter(p => p.category === 'gamepass').length,
-      game: products.filter(p => p.category === 'game').length
-    };
-  }, [products]);
+    const map = { all: products.length };
+    categories.forEach(cat => {
+      map[cat.id] = products.filter(p => p.category === cat.id).length;
+    });
+    return map;
+  }, [products, categories]);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -174,6 +184,7 @@ export default function App() {
           </div>
 
           <CategoryFilter
+            categories={categories}
             activeCategory={activeCategory}
             onSelectCategory={setActiveCategory}
             sortBy={sortBy}
@@ -247,8 +258,8 @@ export default function App() {
             <ul className="space-y-1.5 text-xs text-slate-400">
               <li>• QRIS Instan (+ Biaya Rp 500)</li>
               <li>• E-Wallet (GoPay, OVO, DANA, ShopeePay)</li>
-              <li>• Shopee (Toko Resmi Zhafranstore)</li>
-              <li>• Tokopedia & TikTok Shop</li>
+              <li>• Transfer Bank & Pembayaran Otomatis</li>
+              <li>• Konfirmasi Kilat via WhatsApp & Live Chat</li>
             </ul>
           </div>
 
@@ -301,6 +312,8 @@ export default function App() {
         onClose={() => setIsAdminOpen(false)}
         products={products}
         onProductsUpdated={loadData}
+        categories={categories}
+        onCategoriesUpdated={(newCats) => setCategories(newCats)}
         storeSettings={storeSettings}
         onSettingsUpdated={(newSettings) => setStoreSettings(newSettings)}
         onOpenOrderChat={(order) => {

@@ -2,11 +2,16 @@ export const initialStoreSettings = {
   id: "store_config",
   store_name: "Zhafranstore.id",
   store_tagline: "Pusat Game & Item Gamepass Instan Terpercaya #1",
-  qris_image_url: "/qris-zhafranstore.jpg",
+  qris_image_url: "./qris-zhafranstore.jpg",
   admin_whatsapp: "082542778554",
   admin_email: "zhafran.gibran09@gmail.com",
   payment_instructions: "1. Scan kode QRIS menggunakan GoPay, OVO, DANA, BCA, ShopeePay, atau Bank apa saja.\n2. Pastikan nominal transfer sesuai dengan total tagihan.\n3. Simpan dan unggah bukti transfer, lalu klik 'Konfirmasi WhatsApp' untuk pemrosesan kilat 1-5 menit."
 };
+
+export const initialCategories = [
+  { id: "gamepass", name: "Item Gamepass" },
+  { id: "game", name: "Game PC / Lisensi" }
+];
 
 export const initialProducts = [
   {
@@ -17,10 +22,6 @@ export const initialProducts = [
     game_title: "Roblox",
     image_url: "https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80",
     description: "Item Gamepass Blox Fruits Fast Boats. Pengiriman instan via Trade Server / Gift In-game. Tuliskan Username Roblox akun kamu pada form checkout.",
-    shopee_url: "https://shopee.co.id/search?keyword=zhafranstore+blox+fruits",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com/search?st=product&q=zhafranstore",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: true
@@ -33,10 +34,6 @@ export const initialProducts = [
     game_title: "Roblox",
     image_url: "https://images.unsplash.com/photo-1579373903781-fd5c0c30c4cd?w=800&auto=format&fit=crop&q=80",
     description: "Gamepass 2x Mastery Blox Fruits permanen. Naikkan level mastery buah iblis dan pedang 2 kali lebih cepat. Pengiriman instan.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: true
@@ -49,10 +46,6 @@ export const initialProducts = [
     game_title: "Mobile Legends",
     image_url: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80",
     description: "Weekly Diamond Pass resmi Moonton. Dapatkan total hingga 220 Diamonds + StarLight Point harian. Cukup cantumkan User ID & Zone ID.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: true
@@ -65,10 +58,6 @@ export const initialProducts = [
     game_title: "Mobile Legends",
     image_url: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800&auto=format&fit=crop&q=80",
     description: "Top up kilat Mobile Legends 1155 Diamonds legal 100%. Proses 1-5 menit masuk langsung ke akun MLBB kamu. Kirim format: ID (Zone).",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: true
@@ -81,10 +70,6 @@ export const initialProducts = [
     game_title: "Free Fire",
     image_url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&auto=format&fit=crop&q=80",
     description: "Top Up Free Fire resmi Garena. Hanya perlu Player ID FF tanpa password. Langsung masuk otomatis dalam 2 menit.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: false,
     instant_delivery: true
@@ -97,10 +82,6 @@ export const initialProducts = [
     game_title: "Genshin Impact",
     image_url: "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800&auto=format&fit=crop&q=80",
     description: "Paket Welkin Moon 30 Hari resmi miHoYo/HoYoverse. Dapatkan 300 Genesis Crystals instan + 90 Primogems setiap hari. Cukup kirim UID & Server.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: true
@@ -113,10 +94,6 @@ export const initialProducts = [
     game_title: "Valorant",
     image_url: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=800&auto=format&fit=crop&q=80",
     description: "Top up Valorant Points region Indonesia / SEA. Masukkan Riot ID beserta tag (#ID). Pengiriman instan dan aman anti rollback.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: false,
     instant_delivery: true
@@ -129,10 +106,6 @@ export const initialProducts = [
     game_title: "Steam Game",
     image_url: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80",
     description: "Lisensi Original Game Black Myth: Wukong versi PC Steam. Kode lisensi digital langsung dikirimkan ke WhatsApp pembeli setelah pembayaran terverifikasi.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: false
@@ -145,10 +118,6 @@ export const initialProducts = [
     game_title: "Microsoft Store",
     image_url: "https://images.unsplash.com/photo-1627856013091-fed6e4e30025?w=800&auto=format&fit=crop&q=80",
     description: "Paket lengkap Minecraft Java & Bedrock Edition untuk Windows PC. Akun milik pribadi permanen, bisa ganti email dan password sesuka hati.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: false
@@ -161,10 +130,6 @@ export const initialProducts = [
     game_title: "Rockstar / Steam",
     image_url: "https://images.unsplash.com/photo-1547394765-185e131e37b2?w=800&auto=format&fit=crop&q=80",
     description: "GTA V Premium Edition termasuk Criminal Enterprise Starter Pack ($1,000,000 bonus cash di GTA Online). Dikirim via Steam Gift / Product Key resmi.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: false,
     instant_delivery: false
@@ -177,10 +142,6 @@ export const initialProducts = [
     game_title: "Steam Game",
     image_url: "https://images.unsplash.com/photo-1534423861386-85a16f5d13fd?w=800&auto=format&fit=crop&q=80",
     description: "Game of The Year Elden Ring lengkap beserta ekspansi DLC terbarunya. Key resmi Steam Region Indonesia.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: false,
     instant_delivery: false
@@ -193,10 +154,6 @@ export const initialProducts = [
     game_title: "EA App / Steam",
     image_url: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&auto=format&fit=crop&q=80",
     description: "Game sepak bola terbaru dari EA SPORTS. Nikmati mode Ultimate Team, Karier Manajer, dan gameplay FC IQ generasi terkini.",
-    shopee_url: "https://shopee.co.id",
-    tiktok_url: "https://www.tiktok.com",
-    tokopedia_url: "https://www.tokopedia.com",
-    other_marketplace_url: "",
     is_active: true,
     popular: true,
     instant_delivery: false

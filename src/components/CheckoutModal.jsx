@@ -49,9 +49,6 @@ export default function CheckoutModal({
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [promoError, setPromoError] = useState('');
 
-  // Payment selection state: 'qris' or 'marketplace'
-  const [paymentGroup, setPaymentGroup] = useState('qris'); // 'qris' | 'marketplace'
-  
   // QRIS reveal state (Don't show QRIS immediately; reveal only when user clicks Bayar Sekarang)
   const [showQrisPayment, setShowQrisPayment] = useState(false);
 
@@ -63,8 +60,8 @@ export default function CheckoutModal({
   const [copiedInvoice, setCopiedInvoice] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const adminWhatsApp = storeSettings?.admin_whatsapp || "6282199887766";
-  const qrisImage = storeSettings?.qris_image_url || "/qris-zhafranstore.jpg";
+  const adminWhatsApp = storeSettings?.admin_whatsapp || "082542778554";
+  const qrisImage = storeSettings?.qris_image_url || "./qris-zhafranstore.jpg";
 
   // Reset internal states on open
   useEffect(() => {
@@ -219,39 +216,6 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Handle Marketplace Checkout
-  const handleMarketplaceCheckout = async (marketplaceName, targetUrl) => {
-    if (!validateForm()) return;
-
-    const orderPayload = {
-      product_id: product.id,
-      product_name: product.name,
-      category: product.category,
-      raw_price: rawPrice,
-      admin_fee: 0,
-      price: rawPrice,
-      game_username: zoneId ? `${gameUsername} (${zoneId})` : gameUsername,
-      buyer_whatsapp: buyerWhatsapp,
-      buyer_email: buyerEmail || null,
-      notes: `Checkout via ${marketplaceName}. ` + (buyerNotes || ''),
-      payment_method: marketplaceName.toLowerCase().replace(/\s+/g, '_'),
-      payment_proof_url: null,
-      created_at: new Date().toISOString()
-    };
-
-    const newOrder = await storeService.createOrder(orderPayload);
-    setCreatedOrder(newOrder);
-
-    if (onOrderSuccess) onOrderSuccess(newOrder);
-
-    const url = targetUrl || (
-      marketplaceName === 'Shopee' ? 'https://shopee.co.id' :
-      marketplaceName === 'Tokopedia' ? 'https://tokopedia.com' :
-      'https://tiktok.com'
-    );
-    window.open(url, '_blank');
   };
 
   const copyToClipboard = (text) => {
@@ -684,122 +648,40 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
               {/* Payment Method Selector */}
               <div className="space-y-3 pt-2">
                 <div className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">
-                  2. Pilih Metode Pembayaran
+                  2. Metode Pembayaran
                 </div>
 
-                {/* 2 Main Group Tabs */}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentGroup('qris')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition text-xs font-heading font-bold ${
-                      paymentGroup === 'qris'
-                        ? 'bg-cyan-500/15 border-cyan-400 text-cyan-300 shadow-md shadow-cyan-500/20'
-                        : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white hover:border-white/20'
-                    }`}
-                  >
-                    <QrCode className="w-5 h-5 text-cyan-400" />
-                    <span>QRIS Instan (+ Biaya Rp 500)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentGroup('marketplace')}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition text-xs font-heading font-bold ${
-                      paymentGroup === 'marketplace'
-                        ? 'bg-violet-500/15 border-violet-400 text-violet-300 shadow-md shadow-violet-500/20'
-                        : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white hover:border-white/20'
-                    }`}
-                  >
-                    <ShoppingBag className="w-5 h-5 text-violet-400" />
-                    <span>Checkout via E-Commerce</span>
-                  </button>
+                <div className="p-3.5 rounded-xl border border-cyan-500/40 bg-cyan-950/20 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-400">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-heading font-bold text-xs sm:text-sm text-white flex items-center gap-2">
+                        <span>QRIS Instan Otomatis</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktif</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Scan via BCA, Mandiri, BRI, BNI, DANA, GoPay, OVO, ShopeePay
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* ACTION FOR QRIS: TEKAN BAYAR SEKARANG BARU MUNCUL QRIS */}
-                {paymentGroup === 'qris' && (
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={handleProceedToQRIS}
-                      className="w-full btn-primary py-3.5 rounded-xl font-heading font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/30"
-                    >
-                      <QrCode className="w-4 h-4 text-slate-950" />
-                      <span>Bayar Sekarang (Tampilkan QRIS)</span>
-                      <ArrowRight className="w-4 h-4 text-slate-950" />
-                    </button>
-                    <div className="text-center text-[10px] text-slate-400 mt-1.5">
-                      Klik tombol di atas untuk memunculkan foto QRIS resmi dan menyelesaikan pembayaran.
-                    </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleProceedToQRIS}
+                    className="w-full btn-primary py-3.5 rounded-xl font-heading font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/30"
+                  >
+                    <QrCode className="w-4 h-4 text-slate-950" />
+                    <span>Bayar Sekarang (Tampilkan QRIS)</span>
+                    <ArrowRight className="w-4 h-4 text-slate-950" />
+                  </button>
+                  <div className="text-center text-[10px] text-slate-400 mt-1.5">
+                    Klik tombol di atas untuk memunculkan foto QRIS resmi dan menyelesaikan pembayaran.
                   </div>
-                )}
-
-                {/* Group 2: E-Commerce / Marketplace */}
-                {paymentGroup === 'marketplace' && (
-                  <div className="p-4 rounded-xl bg-slate-900/90 border border-violet-500/30 space-y-3 animate-fadeIn">
-                    <div className="text-xs text-slate-300 leading-relaxed">
-                      Pilih aplikasi *e-commerce* favorit kamu untuk checkout langsung menggunakan saldo ShopeePay, SPayLater, Tokopedia, atau TikTok Shop:
-                    </div>
-
-                    <div className="space-y-2 pt-1">
-                      
-                      {/* Shopee Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleMarketplaceCheckout('Shopee', product.shopee_url)}
-                        className="w-full btn-shopee py-3 px-4 rounded-xl flex items-center justify-between transition text-xs sm:text-sm"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-white flex items-center justify-center text-orange-600 font-black text-xs">
-                            S
-                          </div>
-                          <span>Beli di <strong>Shopee</strong> (Zhafranstore)</span>
-                        </div>
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-
-                      {/* Tokopedia Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleMarketplaceCheckout('Tokopedia', product.tokopedia_url)}
-                        className="w-full btn-tokopedia py-3 px-4 rounded-xl flex items-center justify-between transition text-xs sm:text-sm"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-white flex items-center justify-center text-green-600 font-black text-xs">
-                            T
-                          </div>
-                          <span>Beli di <strong>Tokopedia</strong></span>
-                        </div>
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-
-                      {/* TikTok Shop Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleMarketplaceCheckout('TikTok Shop', product.tiktok_url)}
-                        className="w-full btn-tiktok py-3 px-4 rounded-xl flex items-center justify-between transition text-xs sm:text-sm"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-white flex items-center justify-center text-black font-black text-xs">
-                            TT
-                          </div>
-                          <span>Beli di <strong>TikTok Shop</strong></span>
-                        </div>
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-white/5 text-[11px] text-slate-400 flex items-start gap-2">
-                      <Info className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
-                      <span>
-                        Saat halaman toko terbuka di aplikasi marketplace, silakan lakukan pembelian seperti biasa dan cantumkan ID Akun kamu pada catatan pesanan.
-                      </span>
-                    </div>
-
-                  </div>
-                )}
-
+                </div>
               </div>
             </>
           )}

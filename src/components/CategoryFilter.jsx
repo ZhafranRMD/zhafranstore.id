@@ -1,17 +1,22 @@
 import React from 'react';
-import { Layers, Gamepad2, Zap, ArrowUpDown } from 'lucide-react';
+import { Layers, Gamepad2, Zap, ArrowUpDown, Tag } from 'lucide-react';
 
 export default function CategoryFilter({
+  categories = [],
   activeCategory,
   onSelectCategory,
   sortBy,
   onSortChange,
-  counts
+  counts = {}
 }) {
-  const categories = [
-    { id: "all", label: "Semua Produk", icon: Layers, count: counts.all },
-    { id: "gamepass", label: "Item Gamepass", icon: Zap, count: counts.gamepass },
-    { id: "game", label: "Game PC / Lisensi", icon: Gamepad2, count: counts.game }
+  const dynamicCategories = [
+    { id: "all", label: "Semua Produk", icon: Layers, count: counts.all || 0 },
+    ...categories.map(c => ({
+      id: c.id,
+      label: c.name,
+      icon: c.id === 'gamepass' ? Zap : c.id === 'game' ? Gamepad2 : Tag,
+      count: counts[c.id] || 0
+    }))
   ];
 
   return (
@@ -19,7 +24,7 @@ export default function CategoryFilter({
       
       {/* Category Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-        {categories.map((cat) => {
+        {dynamicCategories.map((cat) => {
           const Icon = cat.icon;
           const isActive = activeCategory === cat.id;
 

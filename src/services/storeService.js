@@ -10,17 +10,19 @@ import {
   serverTimestamp 
 } from "firebase/firestore";
 import { getAppCollection, getAppDoc, db } from "./firebase.js";
-import { initialProducts, initialStoreSettings } from "../data/initialProducts.js";
+import { initialProducts, initialStoreSettings, initialCategories } from "../data/initialProducts.js";
 
 export const ADMIN_FEE = 500;
 
 const LOCAL_STORAGE_KEYS = {
   PRODUCTS: "zhafranstore_products",
+  CATEGORIES: "zhafranstore_categories",
   SETTINGS: "zhafranstore_settings",
   ORDERS: "zhafranstore_orders",
   CHALLENGES: "zhafranstore_challenges",
   EVENTS: "zhafranstore_events",
-  CHATS: "zhafranstore_order_chats"
+  CHATS: "zhafranstore_order_chats",
+  OWNER_ACCOUNT: "zhafranstore_owner_account"
 };
 
 // Helper: safe local storage read
@@ -160,6 +162,83 @@ export const storeService = {
       console.warn("Firestore deleteProduct error:", err.message);
     }
     return true;
+  },
+
+  // 1.5. CATEGORIES MANAGEMENT (Bisa buat kategori sendiri & bisa dihapus)
+  async getCategories() {
+    let categories = getLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, null);
+
+    try {
+      const colRef = getAppCollection("categories");
+      const snapshot = await getDocs(colRef);
+      if (!snapshot.empty) {
+        categories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
+        return categories;
+      }
+    } catch (err) {
+      console.warn("Firestore getCategories fallback to local:", err.message);
+    }
+
+    if (!categories || categories.length === 0) {
+      categories = [...initialCategories];
+      setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
+    }
+    return categories;
+  },
+
+  async saveCategory(name) {
+    if (!name || !name.trim()) return null;
+    const cleanName = name.trim();
+    const id = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `cat-${Date.now()}`;
+    
+    let categories = await this.getCategories();
+    const existingIndex = categories.findIndex(c => c.id === id);
+    const catObj = { id, name: cleanName, createdAt: new Date().toISOString() };
+    
+    if (existingIndex >= 0) {
+      categories[existingIndex] = catObj;
+    } else {
+      categories.push(catObj);
+    }
+    setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
+
+    try {
+      const docRef = getAppDoc("categories", id);
+      await setDoc(docRef, { ...catObj, updatedAt: serverTimestamp() }, { merge: true });
+    } catch (err) {
+      console.warn("Firestore saveCategory error:", err.message);
+    }
+    return catObj;
+  },
+
+  async deleteCategory(categoryId) {
+    let categories = await this.getCategories();
+    categories = categories.filter(c => c.id !== categoryId);
+    setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
+
+    try {
+      const docRef = getAppDoc("categories", categoryId);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.warn("Firestore deleteCategory error:", err.message);
+    }
+    return true;
+  },
+
+  // OWNER ACCOUNT HELPER (Bisa memasukkan akunnya & melihat pesanannya sendiri)
+  getOwnerAccount() {
+    return getLocalData(LOCAL_STORAGE_KEYS.OWNER_ACCOUNT, {
+      username: '',
+      server_id: '',
+      whatsapp: '',
+      email: ''
+    });
+  },
+
+  saveOwnerAccount(accountData) {
+    setLocalData(LOCAL_STORAGE_KEYS.OWNER_ACCOUNT, accountData);
+    return accountData;
   },
 
   // 2. STORE SETTINGS MANAGEMENT
