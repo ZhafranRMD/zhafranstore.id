@@ -19,9 +19,16 @@ import {
   MessageCircle,
   ExternalLink,
   Shield,
-  Smartphone
+  Smartphone,
+  Trophy,
+  ShoppingCart,
+  Send,
+  Check,
+  CheckCheck,
+  Tag
 } from 'lucide-react';
 import { storeService } from '../services/storeService.js';
+import { validAdminCodes } from '../data/promoCodes.js';
 
 export default function AdminModal({ 
   isOpen, 
@@ -41,13 +48,26 @@ export default function AdminModal({
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
 
-  // Active Tab: 'products' | 'qris' | 'orders'
+  // Active Tab: 'orders' | 'products' | 'challenges' | 'admin_buy' | 'qris'
   const [activeTab, setActiveTab] = useState('orders');
 
   // Orders State
   const [orders, setOrders] = useState([]);
   const [orderFilter, setOrderFilter] = useState('all');
   const [viewingProof, setViewingProof] = useState(null);
+
+  // Challenges State
+  const [challenges, setChallenges] = useState([]);
+
+  // Admin Quick Buy / Manual Order State
+  const [manualOrder, setManualOrder] = useState({
+    product_id: products[0]?.id || '',
+    game_username: '',
+    buyer_whatsapp: storeSettings?.admin_whatsapp || '',
+    buyer_email: '',
+    notes: 'Pesanan dibuat oleh Admin',
+    status: 'selesai'
+  });
 
   // Product Editing / Creation State
   const [editingProduct, setEditingProduct] = useState(null);
@@ -77,10 +97,11 @@ export default function AdminModal({
   });
   const [qrisPreview, setQrisPreview] = useState(storeSettings?.qris_image_url || '/qris-zhafranstore.jpg');
 
-  // Load orders on open
+  // Load orders & challenges on open
   useEffect(() => {
     if (isAuthenticated) {
       loadOrders();
+      loadChallenges();
     }
   }, [isAuthenticated]);
 
@@ -89,14 +110,22 @@ export default function AdminModal({
     setOrders(list);
   };
 
-  // Handle Secret Admin Login
+  const loadChallenges = async () => {
+    const list = await storeService.getChallenges(100);
+    setChallenges(list);
+  };
+
+  // Handle Secret Admin Login (Accepts zhafranstoreindonesia and new codes)
   const handleLogin = (e) => {
     e.preventDefault();
-    if (pinInput.trim() === 'zhafranstoreindonesia') {
+    const cleanInput = pinInput.trim().toLowerCase();
+
+    if (validAdminCodes.includes(cleanInput)) {
       setIsAuthenticated(true);
       sessionStorage.setItem('zhafran_admin_auth', 'true');
       setPinError('');
       loadOrders();
+      loadChallenges();
     } else {
       setPinError('Kode akses tidak valid. Akses ditolak.');
     }
@@ -228,6 +257,56 @@ export default function AdminModal({
     window.open(storeService.generateWhatsAppLink(wa, msg), '_blank');
   };
 
+  // ADMIN MANUAL ORDER (ADMIN BISA MEMBELI)
+  const handleCreateAdminOrder = async (e) => {
+    e.preventDefault();
+    const selectedProd = products.find(p => p.id === manualOrder.product_id) || products[0];
+    if (!selectedProd) {
+      alert("Pilih produk terlebih dahulu.");
+      return;
+    }
+    if (!manualOrder.game_username.trim()) {
+      alert("Masukkan Username/ID Akun tujuan.");
+      return;
+    }
+
+    const payload = {
+      product_id: selectedProd.id,
+      product_name: selectedProd.name,
+      category: selectedProd.category,
+      raw_price: selectedProd.price,
+      admin_fee: 500,
+      price: selectedProd.price + 500,
+      game_username: manualOrder.game_username,
+      buyer_whatsapp: manualOrder.buyer_whatsapp,
+      buyer_email: manualOrder.buyer_email || null,
+      notes: `[Admin Order] ${manualOrder.notes}`,
+      status: manualOrder.status || 'selesai',
+      order_mode: 'admin_manual',
+      payment_method: 'qris',
+      created_at: new Date().toISOString()
+    };
+
+    const newOrder = await storeService.createOrder(payload);
+    await loadOrders();
+    if (showToast) showToast(`Pesanan manual ${newOrder.id} berhasil dibuat oleh Admin!`);
+    setActiveTab('orders');
+  };
+
+  // CHALLENGE REVIEW & APPROVAL
+  const handleUpdateChallenge = async (challengeId, status, promoCode = "") => {
+    await storeService.updateChallengeStatus(challengeId, status, promoCode);
+    setChallenges(prev => prev.map(c => c.id === challengeId ? { ...c, status, rewardPromoCode: promoCode } : c));
+    if (showToast) showToast(`Challenge ${challengeId} diubah ke ${status.toUpperCase()}!`);
+  };
+
+  const handleChatChallengeWinner = (chal) => {
+    const wa = chal.whatsappNumber;
+    if (!wa) return;
+    const msg = `Halo kak ${chal.accountHandle}! Selamat, video konten challenge kamu (${chal.viewsCount}+ views) telah disetujui oleh Admin Zhafranstore.id! Kamu mendapatkan kode promo diskon spesial: *indonesiastore* (Diskon 10%). Silakan gunakan saat checkout belanja game/gamepass di website kami ya!`;
+    window.open(storeService.generateWhatsAppLink(wa, msg), '_blank');
+  };
+
   const filteredOrders = orders.filter(o => {
     if (orderFilter === 'all') return true;
     return o.status === orderFilter;
@@ -248,7 +327,7 @@ export default function AdminModal({
                 Dashboard Pemilik Toko
               </h3>
               <p className="text-[11px] text-slate-400">
-                Kelola Produk, Foto QRIS, dan Pesanan Masuk
+                Kelola Produk, QRIS, Challenge Hadiah, & Pesanan
               </p>
             </div>
           </div>
@@ -309,7 +388,7 @@ export default function AdminModal({
             <div className="px-6 pt-3 border-b border-white/10 flex items-center gap-2 overflow-x-auto bg-slate-950/40">
               <button
                 onClick={() => { setActiveTab('orders'); setIsCreatingProduct(false); }}
-                className={`flex items-center gap-2 px-4 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
                   activeTab === 'orders'
                     ? 'border-cyan-400 text-cyan-400 bg-cyan-500/10'
                     : 'border-transparent text-slate-400 hover:text-white'
@@ -317,14 +396,41 @@ export default function AdminModal({
               >
                 <ListOrdered className="w-4 h-4" />
                 <span>Pesanan Masuk</span>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px]">
                   {orders.length}
                 </span>
               </button>
 
               <button
+                onClick={() => { setActiveTab('challenges'); setIsCreatingProduct(false); }}
+                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
+                  activeTab === 'challenges'
+                    ? 'border-amber-400 text-amber-400 bg-amber-500/10'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>Klaim Challenge 1K</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px]">
+                  {challenges.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('admin_buy'); setIsCreatingProduct(false); }}
+                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
+                  activeTab === 'admin_buy'
+                    ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                <ShoppingCart className="w-4 h-4 text-emerald-400" />
+                <span>Beli / Pesanan Manual (Admin)</span>
+              </button>
+
+              <button
                 onClick={() => { setActiveTab('products'); setIsCreatingProduct(false); }}
-                className={`flex items-center gap-2 px-4 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
                   activeTab === 'products'
                     ? 'border-violet-400 text-violet-400 bg-violet-500/10'
                     : 'border-transparent text-slate-400 hover:text-white'
@@ -332,16 +438,16 @@ export default function AdminModal({
               >
                 <Package className="w-4 h-4" />
                 <span>Kelola Produk</span>
-                <span className="px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[10px]">
                   {products.length}
                 </span>
               </button>
 
               <button
                 onClick={() => { setActiveTab('qris'); setIsCreatingProduct(false); }}
-                className={`flex items-center gap-2 px-4 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
                   activeTab === 'qris'
-                    ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
+                    ? 'border-sky-400 text-sky-400 bg-sky-500/10'
                     : 'border-transparent text-slate-400 hover:text-white'
                 }`}
               >
@@ -407,6 +513,9 @@ export default function AdminModal({
                               }`}>
                                 {order.status}
                               </span>
+                              {order.order_mode === 'tanpa_chat_web' && (
+                                <span className="badge badge-purple text-[8px]">Tanpa Chat</span>
+                              )}
                               <span className="text-[10px] text-slate-500">
                                 {order.createdAt ? new Date(order.createdAt).toLocaleDateString('id-ID', {
                                   hour: '2-digit', minute: '2-digit'
@@ -421,8 +530,9 @@ export default function AdminModal({
                             <div className="text-xs text-slate-300 flex flex-wrap items-center gap-x-3 gap-y-1">
                               <span>Akun: <strong className="text-white">{order.game_username}</strong></span>
                               <span>WA: <strong className="text-white">{order.buyer_whatsapp}</strong></span>
-                              <span>Nominal: <strong className="text-emerald-400">{storeService.formatRupiah(order.price)}</strong></span>
-                              <span>Metode: <strong className="uppercase text-sky-400">{order.payment_method}</strong></span>
+                              {order.buyer_email && <span>Email: <strong className="text-cyan-300">{order.buyer_email}</strong></span>}
+                              <span>Total: <strong className="text-emerald-400">{storeService.formatRupiah(order.price)}</strong></span>
+                              {order.admin_fee && <span className="text-[10px] text-slate-400">(Admin: Rp {order.admin_fee})</span>}
                             </div>
                           </div>
 
@@ -490,7 +600,229 @@ export default function AdminModal({
                 </div>
               )}
 
-              {/* TAB 2: PRODUCTS CRUD (FR-07) */}
+              {/* TAB 2: KLAIM CHALLENGE & HADIAH */}
+              {activeTab === 'challenges' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-heading font-bold text-white text-sm">
+                        Daftar Peserta Challenge 1K Views
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        Verifikasi link video, jumlah penonton, dan kode bio peserta untuk memberikan hadiah diskon
+                      </p>
+                    </div>
+                    <button
+                      onClick={loadChallenges}
+                      className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+
+                  {challenges.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-white/5">
+                      Belum ada kiriman klaim challenge video dari kreator.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {challenges.map(chal => (
+                        <div 
+                          key={chal.id}
+                          className="p-4 rounded-xl bg-slate-900/90 border border-white/10 space-y-2 hover:border-amber-400/30 transition"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-xs text-amber-400">{chal.id}</span>
+                              <span className="badge badge-purple text-[9px] uppercase">{chal.platform}</span>
+                              <span className={`badge text-[9px] ${
+                                chal.status === 'approved' ? 'badge-emerald' :
+                                chal.status === 'rejected' ? 'badge-rose' : 'badge-amber'
+                              }`}>
+                                {chal.status}
+                              </span>
+                            </div>
+
+                            <span className="text-[10px] text-slate-500">
+                              {chal.createdAt ? new Date(chal.createdAt).toLocaleDateString('id-ID') : ''}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-300">
+                            <div>Akun: <strong className="text-white">{chal.accountHandle}</strong></div>
+                            <div>Kode di Bio: <strong className="text-amber-300 font-mono">{chal.participantCode}</strong></div>
+                            <div>Estimasi Views: <strong className="text-emerald-400">{chal.viewsCount}+ views</strong></div>
+                            <div>WhatsApp: <strong className="text-white">{chal.whatsappNumber}</strong></div>
+                          </div>
+
+                          <div className="text-xs truncate">
+                            <span className="text-slate-400">Link Video: </span>
+                            <a 
+                              href={chal.videoUrl} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="text-cyan-400 hover:underline inline-flex items-center gap-1"
+                            >
+                              <span>{chal.videoUrl}</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+
+                          {chal.rewardPromoCode && (
+                            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
+                              <Tag className="w-3.5 h-3.5" />
+                              <span>Voucher Hadiah Diberikan: <strong>{chal.rewardPromoCode}</strong></span>
+                            </div>
+                          )}
+
+                          {/* Action Buttons for Challenge */}
+                          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
+                            <button
+                              onClick={() => handleChatChallengeWinner(chal)}
+                              className="btn-whatsapp text-xs py-1.5 px-3 rounded-lg flex items-center gap-1"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>Kirim Hadiah via WA</span>
+                            </button>
+
+                            {chal.status !== 'approved' && (
+                              <button
+                                onClick={() => handleUpdateChallenge(chal.id, 'approved', 'indonesiastore')}
+                                className="btn-primary text-xs py-1.5 px-3 rounded-lg flex items-center gap-1"
+                              >
+                                <CheckCheck className="w-3.5 h-3.5" />
+                                <span>Setujui (Diskon 10%)</span>
+                              </button>
+                            )}
+
+                            {chal.status !== 'rejected' && (
+                              <button
+                                onClick={() => handleUpdateChallenge(chal.id, 'rejected')}
+                                className="btn-secondary text-xs py-1.5 px-3 rounded-lg text-rose-400 hover:text-rose-300"
+                              >
+                                Tolak
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: ADMIN QUICK BUY / MANUAL ORDER */}
+              {activeTab === 'admin_buy' && (
+                <form onSubmit={handleCreateAdminOrder} className="space-y-4 max-w-xl mx-auto">
+                  <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <ShoppingCart className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-heading font-bold text-white text-sm">
+                          Beli / Buat Pesanan Manual (Admin)
+                        </h4>
+                        <p className="text-xs text-slate-400">
+                          Admin dapat membuat pesanan langsung untuk diri sendiri atau pesanan titipan pelanggan
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="form-group !mb-0">
+                      <label className="form-label">Pilih Produk Game / Gamepass *</label>
+                      <select
+                        value={manualOrder.product_id}
+                        onChange={(e) => setManualOrder({ ...manualOrder, product_id: e.target.value })}
+                        className="form-select text-xs"
+                        required
+                      >
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} — {storeService.formatRupiah(p.price)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="form-group !mb-0">
+                        <label className="form-label">Username / ID Akun Game *</label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: ZhafranAdmin / ID Roblox"
+                          value={manualOrder.game_username}
+                          onChange={(e) => setManualOrder({ ...manualOrder, game_username: e.target.value })}
+                          className="form-input text-xs"
+                          required
+                        />
+                      </div>
+
+                      <div className="form-group !mb-0">
+                        <label className="form-label">Nomor WhatsApp *</label>
+                        <input
+                          type="text"
+                          placeholder="Nomor WhatsApp"
+                          value={manualOrder.buyer_whatsapp}
+                          onChange={(e) => setManualOrder({ ...manualOrder, buyer_whatsapp: e.target.value })}
+                          className="form-input text-xs"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="form-group !mb-0">
+                        <label className="form-label">Email (Opsional)</label>
+                        <input
+                          type="email"
+                          placeholder="email@gmail.com"
+                          value={manualOrder.buyer_email}
+                          onChange={(e) => setManualOrder({ ...manualOrder, buyer_email: e.target.value })}
+                          className="form-input text-xs"
+                        />
+                      </div>
+
+                      <div className="form-group !mb-0">
+                        <label className="form-label">Status Awal Pesanan</label>
+                        <select
+                          value={manualOrder.status}
+                          onChange={(e) => setManualOrder({ ...manualOrder, status: e.target.value })}
+                          className="form-select text-xs"
+                        >
+                          <option value="selesai">Selesai (Langsung Kirim)</option>
+                          <option value="diproses">Sedang Diproses</option>
+                          <option value="pending">Pending</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="form-group !mb-0">
+                      <label className="form-label">Catatan Tambahan</label>
+                      <input
+                        type="text"
+                        placeholder="Catatan..."
+                        value={manualOrder.notes}
+                        onChange={(e) => setManualOrder({ ...manualOrder, notes: e.target.value })}
+                        className="form-input text-xs"
+                      />
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        type="submit"
+                        className="w-full btn-primary py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2"
+                      >
+                        <Check className="w-4 h-4 text-slate-950" />
+                        <span>Buat Pesanan Sekarang</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+
+              {/* TAB 4: PRODUCTS CRUD (FR-07) */}
               {activeTab === 'products' && (
                 <div className="space-y-4">
                   
@@ -723,7 +1055,7 @@ export default function AdminModal({
                 </div>
               )}
 
-              {/* TAB 3: QRIS & SETTINGS (FR-08) */}
+              {/* TAB 5: QRIS & SETTINGS (FR-08) */}
               {activeTab === 'qris' && (
                 <form onSubmit={handleSaveSettings} className="space-y-4 max-w-xl mx-auto">
                   

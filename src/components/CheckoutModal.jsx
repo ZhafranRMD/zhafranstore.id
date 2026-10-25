@@ -14,10 +14,15 @@ import {
   Smartphone, 
   ShieldCheck,
   ArrowRight,
-  Info
+  Info,
+  Mail,
+  Tag,
+  Percent,
+  CheckCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { storeService } from '../services/storeService.js';
+import { storeService, ADMIN_FEE } from '../services/storeService.js';
+import { validatePromo } from '../data/promoCodes.js';
 
 export default function CheckoutModal({ 
   product, 
@@ -32,11 +37,16 @@ export default function CheckoutModal({
   const [gameUsername, setGameUsername] = useState('');
   const [zoneId, setZoneId] = useState('');
   const [buyerWhatsapp, setBuyerWhatsapp] = useState('');
+  const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerNotes, setBuyerNotes] = useState('');
   
+  // Promo code discount state
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState(null);
+  const [promoError, setPromoError] = useState('');
+
   // Payment selection state: 'qris' or 'marketplace'
   const [paymentGroup, setPaymentGroup] = useState('qris'); // 'qris' | 'marketplace'
-  const [selectedMarketplace, setSelectedMarketplace] = useState('shopee');
   
   // QRIS proof & processing
   const [proofImage, setProofImage] = useState(null);
@@ -48,6 +58,36 @@ export default function CheckoutModal({
 
   const adminWhatsApp = storeSettings?.admin_whatsapp || "6282199887766";
   const qrisImage = storeSettings?.qris_image_url || "/qris-zhafranstore.jpg";
+
+  // Calculate pricing breakdown
+  const rawPrice = Number(product.price) || 0;
+  const adminFee = ADMIN_FEE; // Biaya Admin Rp 500
+  let discountAmount = 0;
+  if (appliedPromo) {
+    discountAmount = Math.round((rawPrice * appliedPromo.discountPercent) / 100);
+  }
+  const finalPrice = Math.max(0, rawPrice + adminFee - discountAmount);
+
+  // Apply Promo Code
+  const handleApplyPromo = () => {
+    setPromoError('');
+    if (!promoCodeInput.trim()) return;
+
+    const promo = validatePromo(promoCodeInput);
+    if (promo) {
+      setAppliedPromo(promo);
+      setPromoError('');
+    } else {
+      setAppliedPromo(null);
+      setPromoError('Kode promo tidak valid atau telah berakhir.');
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoCodeInput('');
+    setPromoError('');
+  };
 
   // Validate form
   const validateForm = () => {
@@ -91,8 +131,8 @@ export default function CheckoutModal({
     document.body.removeChild(link);
   };
 
-  // Submit QRIS Order & Launch WhatsApp Confirmation
-  const handleConfirmQRIS = async () => {
+  // Submit Order - Dual Option: Tanpa Chat vs Bisa di Chat (WhatsApp)
+  const handleConfirmQRIS = async (openWhatsApp = false) => {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
@@ -101,10 +141,16 @@ export default function CheckoutModal({
         product_id: product.id,
         product_name: product.name,
         category: product.category,
-        price: product.price,
+        raw_price: rawPrice,
+        admin_fee: adminFee,
+        discount_amount: discountAmount,
+        promo_code: appliedPromo ? appliedPromo.code : null,
+        price: finalPrice,
         game_username: zoneId ? `${gameUsername} (${zoneId})` : gameUsername,
         buyer_whatsapp: buyerWhatsapp,
+        buyer_email: buyerEmail || null,
         notes: buyerNotes,
+        order_mode: openWhatsApp ? 'whatsapp_chat' : 'tanpa_chat_web',
         payment_method: 'qris',
         payment_proof_url: proofPreview || null,
         created_at: new Date().toISOString()
@@ -122,20 +168,24 @@ export default function CheckoutModal({
 
       if (onOrderSuccess) onOrderSuccess(newOrder);
 
-      // Buat template pesan WhatsApp terformat otomatis
-      const waMessage = 
+      // Jika user memilih "Bisa di Chat" (WhatsApp), otomatis buka WhatsApp
+      if (openWhatsApp) {
+        const waMessage = 
 `Halo Admin Zhafranstore.id, saya ingin konfirmasi pembayaran QRIS:
 ━━━━━━━━━━━━━━━━━━━━
 🧾 *KODE INVOICE:* ${newOrder.id}
 🎮 *PRODUK:* ${product.name}
-💰 *TOTAL BAYAR:* ${storeService.formatRupiah(product.price)}
+💵 *HARGA PRODUK:* ${storeService.formatRupiah(rawPrice)}
+⚙️ *BIAYA ADMIN:* ${storeService.formatRupiah(adminFee)}
+${discountAmount > 0 ? `🏷️ *DISKON (${appliedPromo.code}):* -${storeService.formatRupiah(discountAmount)}\n` : ''}💰 *TOTAL BAYAR:* ${storeService.formatRupiah(finalPrice)}
 👤 *AKUN TUJUAN:* ${orderPayload.game_username}
-📱 *NO. WA SAYA:* ${buyerWhatsapp}
-${buyerNotes ? `📝 *CATATAN:* ${buyerNotes}\n` : ''}━━━━━━━━━━━━━━━━━━━━
-Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : 'siap dikirimkan'}. Mohon segera diproses kilat ya min. Terima kasih!`;
+📱 *NO. WA:* ${buyerWhatsapp}
+${buyerEmail ? `📧 *EMAIL:* ${buyerEmail}\n` : ''}${buyerNotes ? `📝 *CATATAN:* ${buyerNotes}\n` : ''}━━━━━━━━━━━━━━━━━━━━
+Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di chat ini' : 'siap dikirimkan'}. Mohon segera diproses kilat ya min. Terima kasih!`;
 
-      const waUrl = storeService.generateWhatsAppLink(adminWhatsApp, waMessage);
-      window.open(waUrl, '_blank');
+        const waUrl = storeService.generateWhatsAppLink(adminWhatsApp, waMessage);
+        window.open(waUrl, '_blank');
+      }
 
     } catch (err) {
       console.error("Order error:", err);
@@ -149,14 +199,16 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
   const handleMarketplaceCheckout = async (marketplaceName, targetUrl) => {
     if (!validateForm()) return;
 
-    // Log the order as marketplace order
     const orderPayload = {
       product_id: product.id,
       product_name: product.name,
       category: product.category,
-      price: product.price,
+      raw_price: rawPrice,
+      admin_fee: 0,
+      price: rawPrice,
       game_username: zoneId ? `${gameUsername} (${zoneId})` : gameUsername,
       buyer_whatsapp: buyerWhatsapp,
+      buyer_email: buyerEmail || null,
       notes: `Checkout via ${marketplaceName}. ` + (buyerNotes || ''),
       payment_method: marketplaceName.toLowerCase().replace(/\s+/g, '_'),
       payment_proof_url: null,
@@ -168,7 +220,6 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
 
     if (onOrderSuccess) onOrderSuccess(newOrder);
 
-    // Open target marketplace link or store link
     const url = targetUrl || (
       marketplaceName === 'Shopee' ? 'https://shopee.co.id' :
       marketplaceName === 'Tokopedia' ? 'https://tokopedia.com' :
@@ -228,19 +279,19 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
               <div>
                 <h4 className="font-heading font-bold text-xl text-white">Pesanan Berhasil Dibuat!</h4>
                 <p className="text-xs text-slate-400 mt-1">
-                  Pesanan kamu telah tercatat di sistem Zhafranstore.id dan diteruskan ke Admin.
+                  Pesanan kamu telah tercatat di sistem Zhafranstore.id {createdOrder.order_mode === 'tanpa_chat_web' ? 'dan diproses otomatis tanpa chat.' : 'dan diteruskan ke Admin.'}
                 </p>
               </div>
 
               {/* Invoice Box */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-white/10 text-left space-y-2">
+              <div className="p-4 rounded-xl bg-slate-900 border border-white/10 text-left space-y-2 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Kode Invoice:</span>
+                  <span className="text-slate-400">Kode Invoice:</span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-cyan-400 text-sm">{createdOrder.id}</span>
                     <button
                       onClick={() => copyToClipboard(createdOrder.id)}
-                      className="text-xs text-slate-400 hover:text-white p-1"
+                      className="text-slate-400 hover:text-white p-1"
                       title="Salin Invoice"
                     >
                       {copiedInvoice ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -248,19 +299,43 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between">
                   <span className="text-slate-400">Target Akun:</span>
                   <span className="font-semibold text-white">{createdOrder.game_username}</span>
                 </div>
 
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Total Tagihan:</span>
+                {createdOrder.buyer_email && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Email:</span>
+                    <span className="font-semibold text-white">{createdOrder.buyer_email}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Harga Produk:</span>
+                  <span className="text-slate-300">{storeService.formatRupiah(createdOrder.raw_price || createdOrder.price)}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Biaya Admin:</span>
+                  <span className="text-slate-300">{storeService.formatRupiah(createdOrder.admin_fee || 500)}</span>
+                </div>
+
+                {createdOrder.discount_amount > 0 && (
+                  <div className="flex items-center justify-between text-emerald-400">
+                    <span>Diskon ({createdOrder.promo_code}):</span>
+                    <span>-{storeService.formatRupiah(createdOrder.discount_amount)}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border-t border-white/10 pt-1.5 text-sm">
+                  <span className="text-slate-300 font-bold">Total Pembayaran:</span>
                   <span className="font-bold text-emerald-400">{storeService.formatRupiah(createdOrder.price)}</span>
                 </div>
 
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between pt-1">
                   <span className="text-slate-400">Status:</span>
-                  <span className="badge badge-amber text-[10px]">Menunggu Verifikasi</span>
+                  <span className="badge badge-amber text-[10px]">Menunggu Verifikasi (1-5 Mnt)</span>
                 </div>
               </div>
 
@@ -270,7 +345,7 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                     const waMessage = `Halo Admin Zhafranstore.id, saya ingin konfirmasi pesanan invoice ${createdOrder.id} (${product.name}).`;
                     window.open(storeService.generateWhatsAppLink(adminWhatsApp, waMessage), '_blank');
                   }}
-                  className="w-full btn-whatsapp py-3 rounded-xl flex items-center justify-center gap-2 text-sm"
+                  className="w-full btn-whatsapp py-3 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm"
                 >
                   <MessageCircle className="w-4 h-4" />
                   Chat / Konfirmasi Ulang ke WhatsApp Admin
@@ -286,18 +361,31 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
             </div>
           ) : (
             <>
-              {/* Product Price Summary Banner */}
-              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-cyan-500/20 flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] text-slate-400">Total Pembayaran:</div>
-                  <div className="font-heading font-extrabold text-xl text-cyan-400">
-                    {storeService.formatRupiah(product.price)}
+              {/* Product Price Summary Banner with Admin Fee & Promo */}
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-cyan-500/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] text-slate-400">Total Pembayaran:</div>
+                    <div className="font-heading font-extrabold text-2xl text-cyan-400">
+                      {storeService.formatRupiah(finalPrice)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="badge badge-emerald text-[10px]">
+                      <ShieldCheck className="w-3 h-3" /> Garansi 100%
+                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="badge badge-emerald text-[10px]">
-                    <ShieldCheck className="w-3 h-3" /> Garansi 100%
-                  </span>
+
+                {/* Price Breakdown */}
+                <div className="text-[11px] text-slate-400 pt-1.5 border-t border-white/10 flex flex-wrap items-center justify-between gap-1">
+                  <span>Harga: {storeService.formatRupiah(rawPrice)}</span>
+                  <span>+ Biaya Admin: <strong className="text-slate-200">Rp 500</strong></span>
+                  {appliedPromo && (
+                    <span className="text-emerald-400 font-semibold">
+                      - Diskon: {storeService.formatRupiah(discountAmount)} ({appliedPromo.discountPercent}%)
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -309,10 +397,10 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                 </div>
               )}
 
-              {/* Form Input Data Target Akun (FR-03) */}
+              {/* Form Input Data Target Akun (FR-03 + Email) */}
               <div className="space-y-3">
                 <div className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">
-                  1. Masukkan Data Akun Game
+                  1. Masukkan Data Akun & Kontak
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -344,19 +432,81 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                   </div>
                 </div>
 
-                <div className="form-group !mb-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="form-group !mb-0">
+                    <label className="form-label">
+                      <span>Nomor WhatsApp <span className="text-rose-400">*</span></span>
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="Contoh: 081234567890"
+                      value={buyerWhatsapp}
+                      onChange={(e) => setBuyerWhatsapp(e.target.value)}
+                      className="form-input text-xs"
+                      required
+                    />
+                  </div>
+
+                  {/* Input Email Pembeli */}
+                  <div className="form-group !mb-0">
+                    <label className="form-label">
+                      <span>Alamat Email <span className="text-slate-500 font-normal">(Opsional)</span></span>
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="Contoh: nama@gmail.com"
+                      value={buyerEmail}
+                      onChange={(e) => setBuyerEmail(e.target.value)}
+                      className="form-input text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Input Kode Promo / Diskon */}
+                <div className="form-group !mb-0 pt-1">
                   <label className="form-label">
-                    <span>Nomor WhatsApp Kamu <span className="text-rose-400">*</span></span>
-                    <span className="text-[10px] text-slate-400">Untuk bukti & info item</span>
+                    <span className="flex items-center gap-1.5 text-xs text-slate-300">
+                      <Tag className="w-3.5 h-3.5 text-cyan-400" />
+                      Punya Kode Promo / Kupon Diskon?
+                    </span>
                   </label>
-                  <input
-                    type="tel"
-                    placeholder="Contoh: 081234567890"
-                    value={buyerWhatsapp}
-                    onChange={(e) => setBuyerWhatsapp(e.target.value)}
-                    className="form-input text-xs"
-                    required
-                  />
+                  
+                  {!appliedPromo ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Contoh: indonesiastore / 4storezhafran"
+                        value={promoCodeInput}
+                        onChange={(e) => setPromoCodeInput(e.target.value)}
+                        className="form-input text-xs uppercase font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyPromo}
+                        className="btn-secondary text-xs px-3.5 whitespace-nowrap"
+                      >
+                        Terapkan
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <CheckCheck className="w-4 h-4" />
+                        <span>Kupon '{appliedPromo.code}' Aktif ({appliedPromo.description})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemovePromo}
+                        className="text-xs text-rose-400 hover:text-rose-300 font-bold ml-2"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  )}
+
+                  {promoError && (
+                    <div className="text-[11px] text-rose-400 mt-1">{promoError}</div>
+                  )}
                 </div>
               </div>
 
@@ -378,7 +528,7 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                     }`}
                   >
                     <QrCode className="w-5 h-5 text-cyan-400" />
-                    <span>QRIS Instan (Semua Bank/E-Wallet)</span>
+                    <span>QRIS Instan (+ Biaya Rp 500)</span>
                   </button>
 
                   <button
@@ -395,7 +545,7 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                   </button>
                 </div>
 
-                {/* Group 1: QRIS Display (FR-05) */}
+                {/* Group 1: QRIS Display (FR-05 + Dual Options: Tanpa Chat vs Bisa di Chat) */}
                 {paymentGroup === 'qris' && (
                   <div className="p-4 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-4 animate-fadeIn">
                     
@@ -408,7 +558,7 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                       </div>
                     </div>
 
-                    {/* QRIS Image Container with Official Look */}
+                    {/* QRIS Image Container */}
                     <div className="relative mx-auto w-56 sm:w-64 p-3 bg-white rounded-2xl shadow-xl flex flex-col items-center">
                       <div className="text-[11px] font-black tracking-widest text-slate-900 mb-1">
                         QRIS PEMBAYARAN RESMI
@@ -419,9 +569,9 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                         className="w-full aspect-square object-contain rounded-lg"
                       />
                       <div className="mt-2 text-center">
-                        <div className="text-[10px] text-slate-600 font-bold">TOTAL BAYAR:</div>
+                        <div className="text-[10px] text-slate-600 font-bold">TOTAL HARGA + ADMIN:</div>
                         <div className="font-mono font-black text-slate-950 text-base">
-                          {storeService.formatRupiah(product.price)}
+                          {storeService.formatRupiah(finalPrice)}
                         </div>
                       </div>
                     </div>
@@ -441,7 +591,7 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                     {/* Upload Bukti Transfer */}
                     <div className="space-y-2 pt-2 border-t border-white/10">
                       <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                        <span>Unggah Bukti Transfer <span className="text-slate-500 font-normal">(Opsional / Bisa kirim di WA)</span>:</span>
+                        <span>Unggah Bukti Transfer:</span>
                       </label>
 
                       <div className="relative flex items-center justify-center p-3 border-2 border-dashed border-white/20 hover:border-cyan-400/50 rounded-xl bg-slate-950/60 transition cursor-pointer">
@@ -472,16 +622,34 @@ Bukti bayar sudah ${proofPreview ? 'saya lampirkan di website & di chat ini' : '
                       </div>
                     </div>
 
-                    {/* Glowing Submit QRIS Button */}
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={handleConfirmQRIS}
-                      className="w-full btn-primary py-3 rounded-xl font-heading font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/30"
-                    >
-                      <MessageCircle className="w-4 h-4 text-slate-950" />
-                      <span>{isSubmitting ? 'Memproses Pesanan...' : 'Konfirmasi Bayar ke WhatsApp Admin'}</span>
-                    </button>
+                    {/* DUAL ACTION BUTTONS: TANPA CHAT ATAU BISA DI CHAT */}
+                    <div className="pt-2 space-y-2">
+                      <div className="text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Pilih Opsi Konfirmasi Pesanan:
+                      </div>
+
+                      {/* Tombol 1: Bisa di Chat via WhatsApp */}
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => handleConfirmQRIS(true)}
+                        className="w-full btn-whatsapp py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>{isSubmitting ? 'Memproses...' : 'Konfirmasi via Chat WhatsApp (Rekomendasi)'}</span>
+                      </button>
+
+                      {/* Tombol 2: Tanpa Chat (Otomatis Web) */}
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => handleConfirmQRIS(false)}
+                        className="w-full btn-primary py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                        <span>{isSubmitting ? 'Memproses...' : 'Selesaikan Otomatis (Tanpa di Chat)'}</span>
+                      </button>
+                    </div>
 
                   </div>
                 )}

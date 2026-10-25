@@ -6,6 +6,7 @@ export default function Header({
   setSearchQuery, 
   onOpenAdmin, 
   onOpenTracker, 
+  onOpenChallenge,
   storeSettings 
 }) {
   const adminWhatsApp = storeSettings?.admin_whatsapp || "6282199887766";
@@ -73,6 +74,16 @@ export default function Header({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Event Hadiah & Challenge */}
+          <button
+            onClick={onOpenChallenge}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/10 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-xs sm:text-sm font-semibold text-amber-300 hover:text-amber-200 transition shadow-sm animate-pulse-glow"
+            title="Ikuti Challenge 1K Views & Dapatkan Diskon"
+          >
+            <span className="text-sm">🎁</span>
+            <span className="hidden xs:inline">Event 1K Hadiah</span>
+          </button>
+
           {/* Lacak Pesanan */}
           <button
             onClick={onOpenTracker}

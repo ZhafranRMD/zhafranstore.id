@@ -6,6 +6,7 @@ import ProductGrid from './components/ProductGrid.jsx';
 import CheckoutModal from './components/CheckoutModal.jsx';
 import AdminModal from './components/AdminModal.jsx';
 import OrderTrackerModal from './components/OrderTrackerModal.jsx';
+import ChallengeModal from './components/ChallengeModal.jsx';
 import Toast from './components/Toast.jsx';
 import { storeService } from './services/storeService.js';
 import { initialProducts, initialStoreSettings } from './data/initialProducts.js';
@@ -51,6 +52,7 @@ export default function App() {
   const [checkoutProduct, setCheckoutProduct] = useState(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
+  const [isChallengeOpen, setIsChallengeOpen] = useState(false);
 
   // Toast
   const [toastMessage, setToastMessage] = useState('');
@@ -137,6 +139,7 @@ export default function App() {
         setSearchQuery={setSearchQuery}
         onOpenAdmin={() => setIsAdminOpen(true)}
         onOpenTracker={() => setIsTrackerOpen(true)}
+        onOpenChallenge={() => setIsChallengeOpen(true)}
         storeSettings={storeSettings}
       />
 
@@ -291,6 +294,14 @@ export default function App() {
         isOpen={isTrackerOpen}
         onClose={() => setIsTrackerOpen(false)}
         storeSettings={storeSettings}
+      />
+
+      {/* Challenge 1K Views & Hadiah Modal */}
+      <ChallengeModal
+        isOpen={isChallengeOpen}
+        onClose={() => setIsChallengeOpen(false)}
+        storeSettings={storeSettings}
+        showToast={showToast}
       />
 
       {/* Toast Notification */}

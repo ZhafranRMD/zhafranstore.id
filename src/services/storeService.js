@@ -12,10 +12,13 @@ import {
 import { getAppCollection, getAppDoc, db } from "./firebase.js";
 import { initialProducts, initialStoreSettings } from "../data/initialProducts.js";
 
+export const ADMIN_FEE = 500;
+
 const LOCAL_STORAGE_KEYS = {
   PRODUCTS: "zhafranstore_products",
   SETTINGS: "zhafranstore_settings",
-  ORDERS: "zhafranstore_orders"
+  ORDERS: "zhafranstore_orders",
+  CHALLENGES: "zhafranstore_challenges"
 };
 
 // Helper: safe local storage read
@@ -265,6 +268,79 @@ export const storeService = {
       });
     } catch (err) {
       console.warn("Firestore updateOrderStatus error:", err.message);
+    }
+
+    return true;
+  },
+
+  // 4. EVENT & CHALLENGE REWARDS MANAGEMENT
+  async submitChallenge(challengePayload) {
+    const claimId = `CHL-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+    const newChallenge = {
+      ...challengePayload,
+      id: claimId,
+      status: "pending", // pending, approved, rejected
+      createdAt: new Date().toISOString()
+    };
+
+    // Save locally
+    let localChallenges = getLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, []);
+    localChallenges.unshift(newChallenge);
+    setLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, localChallenges);
+
+    // Save to Firestore
+    try {
+      const docRef = getAppDoc("challenges", claimId);
+      await setDoc(docRef, {
+        ...newChallenge,
+        createdAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn("Firestore submitChallenge error (persisted locally):", err.message);
+    }
+
+    return newChallenge;
+  },
+
+  async getChallenges(maxItems = 50) {
+    let challenges = getLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, []);
+
+    try {
+      const colRef = getAppCollection("challenges");
+      const q = query(colRef, orderBy("createdAt", "desc"), limit(maxItems));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        challenges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, challenges);
+        return challenges;
+      }
+    } catch (err) {
+      console.warn("Firestore getChallenges fallback to local:", err.message);
+    }
+
+    return challenges;
+  },
+
+  async updateChallengeStatus(challengeId, newStatus, rewardPromoCode = "") {
+    let localChallenges = getLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, []);
+    const idx = localChallenges.findIndex(c => c.id === challengeId);
+    if (idx >= 0) {
+      localChallenges[idx].status = newStatus;
+      if (rewardPromoCode) localChallenges[idx].rewardPromoCode = rewardPromoCode;
+      localChallenges[idx].updatedAt = new Date().toISOString();
+      setLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, localChallenges);
+    }
+
+    try {
+      const docRef = getAppDoc("challenges", challengeId);
+      await updateDoc(docRef, {
+        status: newStatus,
+        rewardPromoCode: rewardPromoCode || null,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn("Firestore updateChallengeStatus error:", err.message);
     }
 
     return true;
