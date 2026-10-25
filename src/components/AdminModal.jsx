@@ -25,7 +25,10 @@ import {
   Send,
   Check,
   CheckCheck,
-  Tag
+  Tag,
+  Gift,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { storeService } from '../services/storeService.js';
 import { validAdminCodes } from '../data/promoCodes.js';
@@ -48,7 +51,7 @@ export default function AdminModal({
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
 
-  // Active Tab: 'orders' | 'products' | 'challenges' | 'admin_buy' | 'qris'
+  // Active Tab: 'orders' | 'events' | 'admin_buy' | 'products' | 'qris'
   const [activeTab, setActiveTab] = useState('orders');
 
   // Orders State
@@ -56,17 +59,31 @@ export default function AdminModal({
   const [orderFilter, setOrderFilter] = useState('all');
   const [viewingProof, setViewingProof] = useState(null);
 
-  // Challenges State
+  // Events & Challenges State (Created by Admin)
+  const [events, setEvents] = useState([]);
   const [challenges, setChallenges] = useState([]);
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [eventForm, setEventForm] = useState({
+    title: '',
+    platform: 'Semua Platform (TikTok / YouTube / Instagram)',
+    min_views: 1000,
+    reward_type: 'discount', // 'discount' | 'free_product'
+    reward_value: 'Diskon 10% - 25%',
+    free_product_id: '',
+    description: '',
+    is_active: true
+  });
 
-  // Admin Quick Buy / Manual Order State
+  // Admin Quick Buy / Manual Order State (Admin Bisa Membeli & Berikan Produk Gratis)
   const [manualOrder, setManualOrder] = useState({
     product_id: products[0]?.id || '',
     game_username: '',
     buyer_whatsapp: storeSettings?.admin_whatsapp || '',
     buyer_email: '',
     notes: 'Pesanan dibuat oleh Admin',
-    status: 'selesai'
+    status: 'selesai',
+    is_free_product: false
   });
 
   // Product Editing / Creation State
@@ -97,10 +114,11 @@ export default function AdminModal({
   });
   const [qrisPreview, setQrisPreview] = useState(storeSettings?.qris_image_url || '/qris-zhafranstore.jpg');
 
-  // Load orders & challenges on open
+  // Load data on open
   useEffect(() => {
     if (isAuthenticated) {
       loadOrders();
+      loadEvents();
       loadChallenges();
     }
   }, [isAuthenticated]);
@@ -110,12 +128,17 @@ export default function AdminModal({
     setOrders(list);
   };
 
+  const loadEvents = async () => {
+    const list = await storeService.getEvents();
+    setEvents(list);
+  };
+
   const loadChallenges = async () => {
     const list = await storeService.getChallenges(100);
     setChallenges(list);
   };
 
-  // Handle Secret Admin Login (Accepts zhafranstoreindonesia and new codes)
+  // Handle Secret Admin Login
   const handleLogin = (e) => {
     e.preventDefault();
     const cleanInput = pinInput.trim().toLowerCase();
@@ -125,6 +148,7 @@ export default function AdminModal({
       sessionStorage.setItem('zhafran_admin_auth', 'true');
       setPinError('');
       loadOrders();
+      loadEvents();
       loadChallenges();
     } else {
       setPinError('Kode akses tidak valid. Akses ditolak.');
@@ -134,6 +158,159 @@ export default function AdminModal({
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('zhafran_admin_auth');
+  };
+
+  // ORDER MANAGEMENT & DELETION (BISA DIHAPUS SAAT SELESAI / APAPUN)
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    await storeService.updateOrderStatus(orderId, newStatus);
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    if (showToast) showToast(`Status pesanan ${orderId} diubah ke ${newStatus.toUpperCase()}`);
+  };
+
+  const handleDeleteOrder = async (orderId) => {
+    if (window.confirm(`Yakin ingin menghapus pesanan ${orderId}? Data yang dihapus tidak dapat dipulihkan.`)) {
+      await storeService.deleteOrder(orderId);
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+      if (showToast) showToast(`Pesanan ${orderId} berhasil dihapus!`);
+    }
+  };
+
+  const handleChatBuyer = (order) => {
+    const wa = order.buyer_whatsapp;
+    if (!wa) {
+      alert("Nomor WhatsApp pembeli tidak tersedia.");
+      return;
+    }
+    const msg = `Halo kak! Kami dari ${settingsForm.store_name}. Terkait pesanan ${order.id} (${order.product_name}) untuk akun ${order.game_username}:`;
+    window.open(storeService.generateWhatsAppLink(wa, msg), '_blank');
+  };
+
+  // ADMIN MANUAL ORDER (BISA MEMBELI & MEMBERIKAN PRODUK GRATIS)
+  const handleCreateAdminOrder = async (e) => {
+    e.preventDefault();
+    const selectedProd = products.find(p => p.id === manualOrder.product_id) || products[0];
+    if (!selectedProd) {
+      alert("Pilih produk terlebih dahulu.");
+      return;
+    }
+    if (!manualOrder.game_username.trim()) {
+      alert("Masukkan Username/ID Akun tujuan.");
+      return;
+    }
+
+    const isFree = manualOrder.is_free_product;
+    const finalPrice = isFree ? 0 : (selectedProd.price + 500);
+
+    const payload = {
+      product_id: selectedProd.id,
+      product_name: selectedProd.name,
+      category: selectedProd.category,
+      raw_price: isFree ? 0 : selectedProd.price,
+      admin_fee: isFree ? 0 : 500,
+      price: finalPrice,
+      is_free_product: isFree,
+      game_username: manualOrder.game_username,
+      buyer_whatsapp: manualOrder.buyer_whatsapp,
+      buyer_email: manualOrder.buyer_email || null,
+      notes: isFree ? `[PRODUK GRATIS / FREE GIFT ADMIN] ${manualOrder.notes}` : `[Admin Order] ${manualOrder.notes}`,
+      status: manualOrder.status || 'selesai',
+      order_mode: 'admin_manual',
+      payment_method: isFree ? 'free_gift' : 'qris',
+      created_at: new Date().toISOString()
+    };
+
+    const newOrder = await storeService.createOrder(payload);
+    await loadOrders();
+    if (showToast) showToast(isFree ? `Produk Gratis berhasil diberikan ke ${manualOrder.game_username}!` : `Pesanan manual ${newOrder.id} berhasil dibuat!`);
+    setActiveTab('orders');
+  };
+
+  // EVENT & HADIAH MANAGEMENT (ADMIN YANG BUAT)
+  const handleOpenCreateEvent = () => {
+    setEditingEvent(null);
+    setEventForm({
+      title: 'Challenge Video 1K Views TikTok & YouTube',
+      platform: 'TikTok, YouTube & Instagram',
+      min_views: 1000,
+      reward_type: 'discount',
+      reward_value: 'Diskon 10% - 25%',
+      free_product_id: products[0]?.id || '',
+      description: 'Pasang kode bio di profil kamu, buat video promosi/gameplay Zhafranstore.id, dapatkan 1K views dan klaim hadiah!',
+      is_active: true
+    });
+    setIsCreatingEvent(true);
+  };
+
+  const handleOpenEditEvent = (evt) => {
+    setEditingEvent(evt);
+    setEventForm({
+      title: evt.title || '',
+      platform: evt.platform || 'Semua Platform',
+      min_views: evt.min_views || 1000,
+      reward_type: evt.reward_type || 'discount',
+      reward_value: evt.reward_value || '',
+      free_product_id: evt.free_product_id || products[0]?.id || '',
+      description: evt.description || '',
+      is_active: evt.is_active !== undefined ? evt.is_active : true
+    });
+    setIsCreatingEvent(true);
+  };
+
+  const handleSaveEvent = async (e) => {
+    e.preventDefault();
+    if (!eventForm.title.trim()) {
+      alert("Judul event wajib diisi!");
+      return;
+    }
+
+    const payload = {
+      ...eventForm,
+      id: editingEvent ? editingEvent.id : undefined,
+      min_views: Number(eventForm.min_views) || 1000
+    };
+
+    await storeService.saveEvent(payload);
+    await loadEvents();
+    setIsCreatingEvent(false);
+    setEditingEvent(null);
+    if (showToast) showToast(`Event hadiah "${payload.title}" berhasil disimpan!`);
+  };
+
+  const handleToggleEventStatus = async (evt) => {
+    const updated = { ...evt, is_active: !evt.is_active };
+    await storeService.saveEvent(updated);
+    await loadEvents();
+    if (showToast) showToast(`Status event diubah menjadi ${updated.is_active ? 'AKTIF' : 'NONAKTIF'}`);
+  };
+
+  const handleDeleteEvent = async (eventId, title) => {
+    if (window.confirm(`Yakin ingin menghapus event "${title}"?`)) {
+      await storeService.deleteEvent(eventId);
+      await loadEvents();
+      if (showToast) showToast(`Event "${title}" berhasil dihapus.`);
+    }
+  };
+
+  // CHALLENGE SUBMISSIONS REVIEW
+  const handleUpdateChallenge = async (challengeId, status, promoCode = "") => {
+    await storeService.updateChallengeStatus(challengeId, status, promoCode);
+    setChallenges(prev => prev.map(c => c.id === challengeId ? { ...c, status, rewardPromoCode: promoCode } : c));
+    if (showToast) showToast(`Challenge ${challengeId} diubah ke ${status.toUpperCase()}!`);
+  };
+
+  const handleDeleteChallenge = async (challengeId) => {
+    if (window.confirm("Hapus data klaim challenge ini?")) {
+      await storeService.deleteChallenge(challengeId);
+      setChallenges(prev => prev.filter(c => c.id !== challengeId));
+      if (showToast) showToast("Klaim challenge berhasil dihapus.");
+    }
+  };
+
+  const handleChatChallengeWinner = (chal) => {
+    const wa = chal.whatsappNumber;
+    if (!wa) return;
+    const msg = `Halo kak ${chal.accountHandle}! Selamat, video konten kamu (${chal.viewsCount}+ views) telah diverifikasi dan disetujui Admin Zhafranstore.id! Kamu berhak mendapatkan voucher hadiah spesial. Terima kasih telah berpartisipasi di event kami!`;
+    window.open(storeService.generateWhatsAppLink(wa, msg), '_blank');
   };
 
   // PRODUCT CRUD
@@ -240,73 +417,6 @@ export default function AdminModal({
     setSettingsForm(prev => ({ ...prev, qris_image_url: defaultQris }));
   };
 
-  // ORDER MANAGEMENT
-  const handleUpdateStatus = async (orderId, newStatus) => {
-    await storeService.updateOrderStatus(orderId, newStatus);
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-    if (showToast) showToast(`Status pesanan ${orderId} diubah ke ${newStatus.toUpperCase()}`);
-  };
-
-  const handleChatBuyer = (order) => {
-    const wa = order.buyer_whatsapp;
-    if (!wa) {
-      alert("Nomor WhatsApp pembeli tidak tersedia.");
-      return;
-    }
-    const msg = `Halo kak! Kami dari ${settingsForm.store_name}. Terkait pesanan ${order.id} (${order.product_name}) untuk akun ${order.game_username}:`;
-    window.open(storeService.generateWhatsAppLink(wa, msg), '_blank');
-  };
-
-  // ADMIN MANUAL ORDER (ADMIN BISA MEMBELI)
-  const handleCreateAdminOrder = async (e) => {
-    e.preventDefault();
-    const selectedProd = products.find(p => p.id === manualOrder.product_id) || products[0];
-    if (!selectedProd) {
-      alert("Pilih produk terlebih dahulu.");
-      return;
-    }
-    if (!manualOrder.game_username.trim()) {
-      alert("Masukkan Username/ID Akun tujuan.");
-      return;
-    }
-
-    const payload = {
-      product_id: selectedProd.id,
-      product_name: selectedProd.name,
-      category: selectedProd.category,
-      raw_price: selectedProd.price,
-      admin_fee: 500,
-      price: selectedProd.price + 500,
-      game_username: manualOrder.game_username,
-      buyer_whatsapp: manualOrder.buyer_whatsapp,
-      buyer_email: manualOrder.buyer_email || null,
-      notes: `[Admin Order] ${manualOrder.notes}`,
-      status: manualOrder.status || 'selesai',
-      order_mode: 'admin_manual',
-      payment_method: 'qris',
-      created_at: new Date().toISOString()
-    };
-
-    const newOrder = await storeService.createOrder(payload);
-    await loadOrders();
-    if (showToast) showToast(`Pesanan manual ${newOrder.id} berhasil dibuat oleh Admin!`);
-    setActiveTab('orders');
-  };
-
-  // CHALLENGE REVIEW & APPROVAL
-  const handleUpdateChallenge = async (challengeId, status, promoCode = "") => {
-    await storeService.updateChallengeStatus(challengeId, status, promoCode);
-    setChallenges(prev => prev.map(c => c.id === challengeId ? { ...c, status, rewardPromoCode: promoCode } : c));
-    if (showToast) showToast(`Challenge ${challengeId} diubah ke ${status.toUpperCase()}!`);
-  };
-
-  const handleChatChallengeWinner = (chal) => {
-    const wa = chal.whatsappNumber;
-    if (!wa) return;
-    const msg = `Halo kak ${chal.accountHandle}! Selamat, video konten challenge kamu (${chal.viewsCount}+ views) telah disetujui oleh Admin Zhafranstore.id! Kamu mendapatkan kode promo diskon spesial: *indonesiastore* (Diskon 10%). Silakan gunakan saat checkout belanja game/gamepass di website kami ya!`;
-    window.open(storeService.generateWhatsAppLink(wa, msg), '_blank');
-  };
-
   const filteredOrders = orders.filter(o => {
     if (orderFilter === 'all') return true;
     return o.status === orderFilter;
@@ -327,7 +437,7 @@ export default function AdminModal({
                 Dashboard Pemilik Toko
               </h3>
               <p className="text-[11px] text-slate-400">
-                Kelola Produk, QRIS, Challenge Hadiah, & Pesanan
+                Kelola Pesanan (Hapus/Ubah), Buat Event Hadiah, Produk Gratis, & QRIS
               </p>
             </div>
           </div>
@@ -387,7 +497,7 @@ export default function AdminModal({
             {/* Navigation Tabs */}
             <div className="px-6 pt-3 border-b border-white/10 flex items-center gap-2 overflow-x-auto bg-slate-950/40">
               <button
-                onClick={() => { setActiveTab('orders'); setIsCreatingProduct(false); }}
+                onClick={() => { setActiveTab('orders'); setIsCreatingProduct(false); setIsCreatingEvent(false); }}
                 className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
                   activeTab === 'orders'
                     ? 'border-cyan-400 text-cyan-400 bg-cyan-500/10'
@@ -402,22 +512,22 @@ export default function AdminModal({
               </button>
 
               <button
-                onClick={() => { setActiveTab('challenges'); setIsCreatingProduct(false); }}
+                onClick={() => { setActiveTab('events'); setIsCreatingProduct(false); setIsCreatingEvent(false); }}
                 className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
-                  activeTab === 'challenges'
+                  activeTab === 'events'
                     ? 'border-amber-400 text-amber-400 bg-amber-500/10'
                     : 'border-transparent text-slate-400 hover:text-white'
                 }`}
               >
                 <Trophy className="w-4 h-4 text-amber-400" />
-                <span>Klaim Challenge 1K</span>
+                <span>Kelola Event Hadiah</span>
                 <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px]">
-                  {challenges.length}
+                  {events.length}
                 </span>
               </button>
 
               <button
-                onClick={() => { setActiveTab('admin_buy'); setIsCreatingProduct(false); }}
+                onClick={() => { setActiveTab('admin_buy'); setIsCreatingProduct(false); setIsCreatingEvent(false); }}
                 className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
                   activeTab === 'admin_buy'
                     ? 'border-emerald-400 text-emerald-400 bg-emerald-500/10'
@@ -425,11 +535,11 @@ export default function AdminModal({
                 }`}
               >
                 <ShoppingCart className="w-4 h-4 text-emerald-400" />
-                <span>Beli / Pesanan Manual (Admin)</span>
+                <span>Beli / Produk Gratis</span>
               </button>
 
               <button
-                onClick={() => { setActiveTab('products'); setIsCreatingProduct(false); }}
+                onClick={() => { setActiveTab('products'); setIsCreatingProduct(false); setIsCreatingEvent(false); }}
                 className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
                   activeTab === 'products'
                     ? 'border-violet-400 text-violet-400 bg-violet-500/10'
@@ -444,7 +554,7 @@ export default function AdminModal({
               </button>
 
               <button
-                onClick={() => { setActiveTab('qris'); setIsCreatingProduct(false); }}
+                onClick={() => { setActiveTab('qris'); setIsCreatingProduct(false); setIsCreatingEvent(false); }}
                 className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
                   activeTab === 'qris'
                     ? 'border-sky-400 text-sky-400 bg-sky-500/10'
@@ -459,7 +569,7 @@ export default function AdminModal({
             {/* Tab Body */}
             <div className="modal-body flex-1 overflow-y-auto">
               
-              {/* TAB 1: ORDERS (FR-09) */}
+              {/* TAB 1: ORDERS (BISA DIHAPUS & STATUS DIUBAH) */}
               {activeTab === 'orders' && (
                 <div className="space-y-4">
                   
@@ -513,6 +623,9 @@ export default function AdminModal({
                               }`}>
                                 {order.status}
                               </span>
+                              {order.is_free_product && (
+                                <span className="badge badge-amber text-[8px]">PRODUK GRATIS</span>
+                              )}
                               {order.order_mode === 'tanpa_chat_web' && (
                                 <span className="badge badge-purple text-[8px]">Tanpa Chat</span>
                               )}
@@ -531,12 +644,11 @@ export default function AdminModal({
                               <span>Akun: <strong className="text-white">{order.game_username}</strong></span>
                               <span>WA: <strong className="text-white">{order.buyer_whatsapp}</strong></span>
                               {order.buyer_email && <span>Email: <strong className="text-cyan-300">{order.buyer_email}</strong></span>}
-                              <span>Total: <strong className="text-emerald-400">{storeService.formatRupiah(order.price)}</strong></span>
-                              {order.admin_fee && <span className="text-[10px] text-slate-400">(Admin: Rp {order.admin_fee})</span>}
+                              <span>Total: <strong className="text-emerald-400">{order.is_free_product ? 'GRATIS (Rp 0)' : storeService.formatRupiah(order.price)}</strong></span>
                             </div>
                           </div>
 
-                          {/* Actions */}
+                          {/* Actions: View Proof, Chat WA, Change Status, & HAPUS PESANAN */}
                           <div className="flex items-center gap-2 self-end sm:self-center">
                             {order.payment_proof_url && (
                               <button
@@ -569,6 +681,15 @@ export default function AdminModal({
                               <option value="selesai">Selesai</option>
                               <option value="cancelled">Dibatalkan</option>
                             </select>
+
+                            {/* TOMBOL HAPUS PESANAN */}
+                            <button
+                              onClick={() => handleDeleteOrder(order.id)}
+                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition"
+                              title="Hapus Pesanan ini"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -600,119 +721,288 @@ export default function AdminModal({
                 </div>
               )}
 
-              {/* TAB 2: KLAIM CHALLENGE & HADIAH */}
-              {activeTab === 'challenges' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-heading font-bold text-white text-sm">
-                        Daftar Peserta Challenge 1K Views
-                      </h4>
-                      <p className="text-xs text-slate-400">
-                        Verifikasi link video, jumlah penonton, dan kode bio peserta untuk memberikan hadiah diskon
-                      </p>
-                    </div>
-                    <button
-                      onClick={loadChallenges}
-                      className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Refresh</span>
-                    </button>
-                  </div>
-
-                  {challenges.length === 0 ? (
-                    <div className="text-center py-12 text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-white/5">
-                      Belum ada kiriman klaim challenge video dari kreator.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {challenges.map(chal => (
-                        <div 
-                          key={chal.id}
-                          className="p-4 rounded-xl bg-slate-900/90 border border-white/10 space-y-2 hover:border-amber-400/30 transition"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-xs text-amber-400">{chal.id}</span>
-                              <span className="badge badge-purple text-[9px] uppercase">{chal.platform}</span>
-                              <span className={`badge text-[9px] ${
-                                chal.status === 'approved' ? 'badge-emerald' :
-                                chal.status === 'rejected' ? 'badge-rose' : 'badge-amber'
-                              }`}>
-                                {chal.status}
-                              </span>
-                            </div>
-
-                            <span className="text-[10px] text-slate-500">
-                              {chal.createdAt ? new Date(chal.createdAt).toLocaleDateString('id-ID') : ''}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-300">
-                            <div>Akun: <strong className="text-white">{chal.accountHandle}</strong></div>
-                            <div>Kode di Bio: <strong className="text-amber-300 font-mono">{chal.participantCode}</strong></div>
-                            <div>Estimasi Views: <strong className="text-emerald-400">{chal.viewsCount}+ views</strong></div>
-                            <div>WhatsApp: <strong className="text-white">{chal.whatsappNumber}</strong></div>
-                          </div>
-
-                          <div className="text-xs truncate">
-                            <span className="text-slate-400">Link Video: </span>
-                            <a 
-                              href={chal.videoUrl} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="text-cyan-400 hover:underline inline-flex items-center gap-1"
-                            >
-                              <span>{chal.videoUrl}</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          </div>
-
-                          {chal.rewardPromoCode && (
-                            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
-                              <Tag className="w-3.5 h-3.5" />
-                              <span>Voucher Hadiah Diberikan: <strong>{chal.rewardPromoCode}</strong></span>
-                            </div>
-                          )}
-
-                          {/* Action Buttons for Challenge */}
-                          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/5">
-                            <button
-                              onClick={() => handleChatChallengeWinner(chal)}
-                              className="btn-whatsapp text-xs py-1.5 px-3 rounded-lg flex items-center gap-1"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                              <span>Kirim Hadiah via WA</span>
-                            </button>
-
-                            {chal.status !== 'approved' && (
-                              <button
-                                onClick={() => handleUpdateChallenge(chal.id, 'approved', 'indonesiastore')}
-                                className="btn-primary text-xs py-1.5 px-3 rounded-lg flex items-center gap-1"
-                              >
-                                <CheckCheck className="w-3.5 h-3.5" />
-                                <span>Setujui (Diskon 10%)</span>
-                              </button>
-                            )}
-
-                            {chal.status !== 'rejected' && (
-                              <button
-                                onClick={() => handleUpdateChallenge(chal.id, 'rejected')}
-                                className="btn-secondary text-xs py-1.5 px-3 rounded-lg text-rose-400 hover:text-rose-300"
-                              >
-                                Tolak
-                              </button>
-                            )}
-                          </div>
+              {/* TAB 2: KELOLA EVENT HADIAH (ADMIN YANG BUAT) */}
+              {activeTab === 'events' && (
+                <div className="space-y-5">
+                  {!isCreatingEvent ? (
+                    <>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                        <div>
+                          <h4 className="font-heading font-bold text-amber-300 text-sm">
+                            Kelola Event & Challenge Hadiah
+                          </h4>
+                          <p className="text-xs text-slate-300 mt-0.5">
+                            Event di etalase pembeli hanya muncul jika dibuat dan diaktifkan oleh Admin.
+                          </p>
                         </div>
-                      ))}
-                    </div>
+
+                        <button
+                          onClick={handleOpenCreateEvent}
+                          className="btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 self-start sm:self-auto"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Buat Event Hadiah Baru</span>
+                        </button>
+                      </div>
+
+                      {/* DAFTAR EVENT DIBUAT ADMIN */}
+                      <div className="space-y-3">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          Daftar Event Dibuat Admin ({events.length})
+                        </div>
+
+                        {events.length === 0 ? (
+                          <div className="text-center py-8 text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-white/5">
+                            Belum ada event hadiah yang dibuat. Klik tombol di atas untuk membuat event baru!
+                          </div>
+                        ) : (
+                          events.map(evt => (
+                            <div 
+                              key={evt.id}
+                              className={`p-4 rounded-xl border transition ${
+                                evt.is_active 
+                                  ? 'bg-slate-900/90 border-amber-500/30' 
+                                  : 'bg-slate-900/50 border-white/10 opacity-70'
+                              }`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-heading font-bold text-white text-base">
+                                    {evt.title}
+                                  </span>
+                                  <span className={`badge text-[9px] ${evt.is_active ? 'badge-emerald' : 'badge-rose'}`}>
+                                    {evt.is_active ? 'AKTIF' : 'NONAKTIF'}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleToggleEventStatus(evt)}
+                                    className="btn-secondary text-[10px] py-1 px-2.5"
+                                  >
+                                    {evt.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenEditEvent(evt)}
+                                    className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                                    title="Edit Event"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteEvent(evt.id, evt.title)}
+                                    className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
+                                    title="Hapus Event"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="mt-2 text-xs text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
+                                <span>Platform: <strong className="text-white">{evt.platform}</strong></span>
+                                <span>Syarat Min: <strong className="text-cyan-300">{evt.min_views}+ views</strong></span>
+                                <span>Hadiah: <strong className="text-amber-400">{evt.reward_value}</strong></span>
+                              </div>
+
+                              {evt.description && (
+                                <p className="mt-2 text-[11px] text-slate-400">
+                                  {evt.description}
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* DAFTAR KLAIM MASUK DARI PESERTA */}
+                      <div className="space-y-3 pt-4 border-t border-white/10">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                          <span>Klaim Peserta Masuk ({challenges.length})</span>
+                          <button onClick={loadChallenges} className="text-cyan-400 hover:underline">Refresh</button>
+                        </div>
+
+                        {challenges.length === 0 ? (
+                          <div className="text-center py-6 text-slate-500 text-xs bg-slate-900/30 rounded-xl">
+                            Belum ada kiriman klaim video peserta.
+                          </div>
+                        ) : (
+                          challenges.map(chal => (
+                            <div key={chal.id} className="p-3.5 rounded-xl bg-slate-900 border border-white/10 space-y-2">
+                              <div className="flex justify-between items-center text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-amber-400 font-bold">{chal.id}</span>
+                                  <span className="badge badge-purple text-[9px] uppercase">{chal.platform}</span>
+                                  <span className={`badge text-[9px] ${chal.status === 'approved' ? 'badge-emerald' : 'badge-amber'}`}>
+                                    {chal.status}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-500">{chal.createdAt ? new Date(chal.createdAt).toLocaleDateString('id-ID') : ''}</span>
+                              </div>
+
+                              <div className="text-xs text-slate-300 grid grid-cols-2 gap-2">
+                                <div>Akun: <strong className="text-white">{chal.accountHandle}</strong></div>
+                                <div>Kode Bio: <strong className="font-mono text-amber-300">{chal.participantCode}</strong></div>
+                                <div>Views: <strong className="text-emerald-400">{chal.viewsCount}+</strong></div>
+                                <div>WA: <strong className="text-white">{chal.whatsappNumber}</strong></div>
+                              </div>
+
+                              <div className="text-xs truncate">
+                                Link: <a href={chal.videoUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">{chal.videoUrl}</a>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-2 pt-1 border-t border-white/5">
+                                <button
+                                  onClick={() => handleChatChallengeWinner(chal)}
+                                  className="btn-whatsapp text-xs py-1 px-2.5 rounded-lg flex items-center gap-1"
+                                >
+                                  <MessageCircle className="w-3 h-3" />
+                                  <span>Chat Hadiah WA</span>
+                                </button>
+                                {chal.status !== 'approved' && (
+                                  <button
+                                    onClick={() => handleUpdateChallenge(chal.id, 'approved', 'indonesiastore')}
+                                    className="btn-primary text-xs py-1 px-2.5 rounded-lg"
+                                  >
+                                    Setujui Hadiah
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteChallenge(chal.id)}
+                                  className="p-1 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
+                                  title="Hapus Klaim"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    /* FORM BUAT / EDIT EVENT OLEH ADMIN */
+                    <form onSubmit={handleSaveEvent} className="space-y-4 max-w-xl mx-auto">
+                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                        <h4 className="font-heading font-bold text-white text-base">
+                          {editingEvent ? 'Edit Event Hadiah' : 'Buat Event Hadiah Baru'}
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => setIsCreatingEvent(false)}
+                          className="text-xs text-slate-400 hover:text-white"
+                        >
+                          Batal
+                        </button>
+                      </div>
+
+                      <div className="form-group !mb-0">
+                        <label className="form-label">Judul Event *</label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: Challenge Video TikTok 1K Views Berhadiah Gamepass"
+                          value={eventForm.title}
+                          onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
+                          className="form-input text-xs"
+                          required
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="form-group !mb-0">
+                          <label className="form-label">Platform Media Sosial</label>
+                          <input
+                            type="text"
+                            placeholder="Contoh: TikTok, YouTube & Instagram"
+                            value={eventForm.platform}
+                            onChange={(e) => setEventForm({ ...eventForm, platform: e.target.value })}
+                            className="form-input text-xs"
+                          />
+                        </div>
+
+                        <div className="form-group !mb-0">
+                          <label className="form-label">Syarat Minimal Penonton (Views)</label>
+                          <input
+                            type="number"
+                            placeholder="1000"
+                            value={eventForm.min_views}
+                            onChange={(e) => setEventForm({ ...eventForm, min_views: e.target.value })}
+                            className="form-input text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="form-group !mb-0">
+                          <label className="form-label">Jenis Hadiah</label>
+                          <select
+                            value={eventForm.reward_type}
+                            onChange={(e) => setEventForm({ ...eventForm, reward_type: e.target.value })}
+                            className="form-select text-xs"
+                          >
+                            <option value="discount">🎟️ Diskon Promo (%)</option>
+                            <option value="free_product">🎁 Produk Game Gratis (Free)</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group !mb-0">
+                          <label className="form-label">Deskripsi Hadiah / Nilai</label>
+                          <input
+                            type="text"
+                            placeholder="Contoh: Diskon 10% s/d 25% atau Fast Boats Free"
+                            value={eventForm.reward_value}
+                            onChange={(e) => setEventForm({ ...eventForm, reward_value: e.target.value })}
+                            className="form-input text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group !mb-0">
+                        <label className="form-label">Panduan Singkat Untuk Peserta</label>
+                        <textarea
+                          rows={3}
+                          placeholder="Panduan cara memasang kode bio, buat video, dan syarat lainnya..."
+                          value={eventForm.description}
+                          onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
+                          className="form-textarea text-xs"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="checkbox"
+                          id="event_active_check"
+                          checked={eventForm.is_active}
+                          onChange={(e) => setEventForm({ ...eventForm, is_active: e.target.checked })}
+                          className="w-4 h-4 rounded text-cyan-400"
+                        />
+                        <label htmlFor="event_active_check" className="text-xs text-white cursor-pointer font-semibold">
+                          Aktifkan event ini langsung di etalase toko
+                        </label>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => setIsCreatingEvent(false)}
+                          className="btn-secondary text-xs py-2 px-4"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn-primary text-xs py-2 px-5 flex items-center gap-1.5"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Simpan Event</span>
+                        </button>
+                      </div>
+                    </form>
                   )}
                 </div>
               )}
 
-              {/* TAB 3: ADMIN QUICK BUY / MANUAL ORDER */}
+              {/* TAB 3: ADMIN QUICK BUY & MEMBERIKAN PRODUK GRATIS */}
               {activeTab === 'admin_buy' && (
                 <form onSubmit={handleCreateAdminOrder} className="space-y-4 max-w-xl mx-auto">
                   <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 space-y-4">
@@ -722,12 +1012,33 @@ export default function AdminModal({
                       </div>
                       <div>
                         <h4 className="font-heading font-bold text-white text-sm">
-                          Beli / Buat Pesanan Manual (Admin)
+                          Beli / Berikan Produk Gratis (Admin)
                         </h4>
                         <p className="text-xs text-slate-400">
-                          Admin dapat membuat pesanan langsung untuk diri sendiri atau pesanan titipan pelanggan
+                          Admin dapat membuat pesanan manual berbayar atau mengirimkan item secara gratis 100%
                         </p>
                       </div>
+                    </div>
+
+                    {/* TOGGLE PRODUK GRATIS (FREE PRODUCT) */}
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Gift className="w-5 h-5 text-amber-400" />
+                        <div>
+                          <div className="text-xs font-bold text-white">Berikan Sebagai Produk Gratis (FREE)</div>
+                          <div className="text-[10px] text-slate-300">Harga otomatis menjadi Rp 0 (Bebas Biaya Admin)</div>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={manualOrder.is_free_product}
+                          onChange={(e) => setManualOrder({ ...manualOrder, is_free_product: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                      </label>
                     </div>
 
                     <div className="form-group !mb-0">
@@ -740,7 +1051,7 @@ export default function AdminModal({
                       >
                         {products.map(p => (
                           <option key={p.id} value={p.id}>
-                            {p.name} — {storeService.formatRupiah(p.price)}
+                            {p.name} — {manualOrder.is_free_product ? 'GRATIS (Rp 0)' : storeService.formatRupiah(p.price)}
                           </option>
                         ))}
                       </select>
@@ -802,7 +1113,7 @@ export default function AdminModal({
                       <label className="form-label">Catatan Tambahan</label>
                       <input
                         type="text"
-                        placeholder="Catatan..."
+                        placeholder="Hadiah loyalitas / Pesanan titipan..."
                         value={manualOrder.notes}
                         onChange={(e) => setManualOrder({ ...manualOrder, notes: e.target.value })}
                         className="form-input text-xs"
@@ -815,17 +1126,16 @@ export default function AdminModal({
                         className="w-full btn-primary py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2"
                       >
                         <Check className="w-4 h-4 text-slate-950" />
-                        <span>Buat Pesanan Sekarang</span>
+                        <span>{manualOrder.is_free_product ? 'Kirim Produk Gratis Sekarang' : 'Buat Pesanan Sekarang'}</span>
                       </button>
                     </div>
                   </div>
                 </form>
               )}
 
-              {/* TAB 4: PRODUCTS CRUD (FR-07) */}
+              {/* TAB 4: PRODUCTS CRUD */}
               {activeTab === 'products' && (
                 <div className="space-y-4">
-                  
                   {!isCreatingProduct ? (
                     <>
                       <div className="flex items-center justify-between">
@@ -889,7 +1199,7 @@ export default function AdminModal({
                       </div>
                     </>
                   ) : (
-                    /* PRODUCT FORM (ADD / EDIT) */
+                    /* PRODUCT FORM */
                     <form onSubmit={handleSaveProduct} className="space-y-4">
                       <div className="flex items-center justify-between pb-2 border-b border-white/10">
                         <h4 className="font-heading font-bold text-white text-base">
@@ -955,7 +1265,6 @@ export default function AdminModal({
                         </div>
                       </div>
 
-                      {/* Image Input */}
                       <div className="form-group !mb-0">
                         <label className="form-label">Gambar Produk (URL atau Upload Langsung)</label>
                         <div className="flex gap-2">
@@ -995,7 +1304,6 @@ export default function AdminModal({
                         />
                       </div>
 
-                      {/* Marketplace Links */}
                       <div className="p-3 rounded-xl bg-slate-950/60 border border-white/10 space-y-2">
                         <div className="text-xs font-bold text-slate-300">Link Eksternal Marketplace (Opsional):</div>
                         
@@ -1051,18 +1359,16 @@ export default function AdminModal({
                       </div>
                     </form>
                   )}
-
                 </div>
               )}
 
-              {/* TAB 5: QRIS & SETTINGS (FR-08) */}
+              {/* TAB 5: QRIS & SETTINGS */}
               {activeTab === 'qris' && (
                 <form onSubmit={handleSaveSettings} className="space-y-4 max-w-xl mx-auto">
                   
                   <div className="p-4 rounded-xl bg-slate-900 border border-white/10 space-y-4">
                     <h4 className="font-heading font-bold text-white text-sm">Foto QRIS Pembayaran</h4>
                     
-                    {/* QRIS Image Preview */}
                     <div className="flex flex-col sm:flex-row items-center gap-4">
                       <div className="w-44 p-2 bg-white rounded-xl shadow-lg flex flex-col items-center flex-shrink-0">
                         <img 
@@ -1104,7 +1410,6 @@ export default function AdminModal({
                     </div>
                   </div>
 
-                  {/* Store Details Form */}
                   <div className="p-4 rounded-xl bg-slate-900 border border-white/10 space-y-3">
                     <h4 className="font-heading font-bold text-white text-sm">Informasi Toko & WhatsApp</h4>
 
@@ -1126,9 +1431,6 @@ export default function AdminModal({
                         onChange={(e) => setSettingsForm({ ...settingsForm, admin_whatsapp: e.target.value })}
                         className="form-input text-xs"
                       />
-                      <span className="text-[10px] text-slate-500">
-                        Nomor ini akan menerima pesan konfirmasi pesanan dari pembeli.
-                      </span>
                     </div>
 
                     <div className="form-group !mb-0">

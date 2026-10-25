@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   QrCode, 
@@ -14,11 +14,13 @@ import {
   Smartphone, 
   ShieldCheck,
   ArrowRight,
+  ArrowLeft,
   Info,
   Mail,
   Tag,
   Percent,
-  CheckCheck
+  CheckCheck,
+  Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { storeService, ADMIN_FEE } from '../services/storeService.js';
@@ -40,7 +42,7 @@ export default function CheckoutModal({
   const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerNotes, setBuyerNotes] = useState('');
   
-  // Promo code discount state
+  // Promo code discount state (Completely Optional)
   const [promoCodeInput, setPromoCodeInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [promoError, setPromoError] = useState('');
@@ -48,6 +50,9 @@ export default function CheckoutModal({
   // Payment selection state: 'qris' or 'marketplace'
   const [paymentGroup, setPaymentGroup] = useState('qris'); // 'qris' | 'marketplace'
   
+  // QRIS reveal state (Don't show QRIS immediately; reveal only when user clicks Bayar Sekarang)
+  const [showQrisPayment, setShowQrisPayment] = useState(false);
+
   // QRIS proof & processing
   const [proofImage, setProofImage] = useState(null);
   const [proofPreview, setProofPreview] = useState('');
@@ -59,6 +64,15 @@ export default function CheckoutModal({
   const adminWhatsApp = storeSettings?.admin_whatsapp || "6282199887766";
   const qrisImage = storeSettings?.qris_image_url || "/qris-zhafranstore.jpg";
 
+  // Reset internal states on open
+  useEffect(() => {
+    setShowQrisPayment(false);
+    setCreatedOrder(null);
+    setProofPreview('');
+    setProofImage(null);
+    setErrorMsg('');
+  }, [product, isOpen]);
+
   // Calculate pricing breakdown
   const rawPrice = Number(product.price) || 0;
   const adminFee = ADMIN_FEE; // Biaya Admin Rp 500
@@ -68,10 +82,13 @@ export default function CheckoutModal({
   }
   const finalPrice = Math.max(0, rawPrice + adminFee - discountAmount);
 
-  // Apply Promo Code
+  // Apply Promo Code (Optional)
   const handleApplyPromo = () => {
     setPromoError('');
-    if (!promoCodeInput.trim()) return;
+    if (!promoCodeInput.trim()) {
+      setAppliedPromo(null);
+      return;
+    }
 
     const promo = validatePromo(promoCodeInput);
     if (promo) {
@@ -101,6 +118,13 @@ export default function CheckoutModal({
     }
     setErrorMsg('');
     return true;
+  };
+
+  // Trigger reveal of QRIS on "Bayar Sekarang"
+  const handleProceedToQRIS = () => {
+    if (!validateForm()) return;
+    setShowQrisPayment(true);
+    setErrorMsg('');
   };
 
   // Handle File Proof Upload
@@ -181,7 +205,7 @@ ${discountAmount > 0 ? `🏷️ *DISKON (${appliedPromo.code}):* -${storeService
 👤 *AKUN TUJUAN:* ${orderPayload.game_username}
 📱 *NO. WA:* ${buyerWhatsapp}
 ${buyerEmail ? `📧 *EMAIL:* ${buyerEmail}\n` : ''}${buyerNotes ? `📝 *CATATAN:* ${buyerNotes}\n` : ''}━━━━━━━━━━━━━━━━━━━━
-Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di chat ini' : 'siap dikirimkan'}. Mohon segera diproses kilat ya min. Terima kasih!`;
+Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di chat ini' : 'siap dikirimkan'}. Mohon segera diproses ya min. Terima kasih!`;
 
         const waUrl = storeService.generateWhatsAppLink(adminWhatsApp, waMessage);
         window.open(waUrl, '_blank');
@@ -359,13 +383,143 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di ch
                 </button>
               </div>
             </div>
+          ) : showQrisPayment ? (
+            /* STEP 2: TAMPILAN QRIS HANYA SAAT TOMBOL BAYAR SEKARANG DITEKAN */
+            <div className="space-y-4 animate-fadeIn">
+              
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowQrisPayment(false)}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Ubah Data / Kembali</span>
+                </button>
+
+                <span className="badge badge-cyan text-[10px]">
+                  Langkah 2: Selesaikan Bayar
+                </span>
+              </div>
+
+              {/* Rincian Tagihan */}
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] text-slate-400">Total Yang Harus Dibayar:</div>
+                  <div className="font-heading font-extrabold text-2xl text-cyan-400">
+                    {storeService.formatRupiah(finalPrice)}
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    (Harga: {storeService.formatRupiah(rawPrice)} + Admin: Rp 500 {discountAmount > 0 ? `- Diskon: ${storeService.formatRupiah(discountAmount)}` : ''})
+                  </div>
+                </div>
+
+                <div className="text-right text-xs">
+                  <div className="text-slate-400">Akun Tujuan:</div>
+                  <div className="font-bold text-white">{gameUsername}</div>
+                </div>
+              </div>
+
+              {/* Box Foto QRIS Resmi */}
+              <div className="relative mx-auto w-56 sm:w-64 p-3.5 bg-white rounded-2xl shadow-xl flex flex-col items-center">
+                <div className="text-[11px] font-black tracking-widest text-slate-900 mb-1">
+                  QRIS PEMBAYARAN RESMI
+                </div>
+                <img 
+                  src={qrisImage} 
+                  alt="QRIS Pembayaran Zhafranstore.id"
+                  className="w-full aspect-square object-contain rounded-lg"
+                />
+                <div className="mt-2 text-center">
+                  <div className="text-[10px] text-slate-600 font-bold">TOTAL NOMINAL:</div>
+                  <div className="font-mono font-black text-slate-950 text-base">
+                    {storeService.formatRupiah(finalPrice)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tombol Unduh QRIS */}
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleDownloadQRIS}
+                  className="btn-secondary text-xs py-2 px-4 rounded-lg flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Unduh Gambar QRIS</span>
+                </button>
+              </div>
+
+              {/* Upload Bukti Bayar */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                  <span>Unggah Bukti Transfer:</span>
+                </label>
+
+                <div className="relative flex items-center justify-center p-3 border-2 border-dashed border-white/20 hover:border-cyan-400/50 rounded-xl bg-slate-950/60 transition cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  {proofPreview ? (
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={proofPreview} 
+                        alt="Bukti Preview" 
+                        className="w-12 h-12 object-cover rounded-lg border border-cyan-400/40" 
+                      />
+                      <div className="text-left text-xs">
+                        <div className="text-cyan-300 font-medium">Bukti terpasang ✓</div>
+                        <div className="text-slate-400 text-[10px]">Klik untuk mengganti foto</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <Upload className="w-4 h-4 text-cyan-400" />
+                      <span>Pilih foto bukti bayar dari galeri/PC</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* DUAL ACTION BUTTONS: BISA DI CHAT ATAU TANPA CHAT */}
+              <div className="pt-2 space-y-2">
+                <div className="text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Pilih Cara Konfirmasi Pesanan:
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => handleConfirmQRIS(true)}
+                  className="w-full btn-whatsapp py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>{isSubmitting ? 'Memproses...' : 'Konfirmasi via Chat WhatsApp (Rekomendasi)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => handleConfirmQRIS(false)}
+                  className="w-full btn-primary py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                  <span>{isSubmitting ? 'Memproses...' : 'Selesaikan Otomatis (Tanpa di Chat)'}</span>
+                </button>
+              </div>
+
+            </div>
           ) : (
+            /* STEP 1: FORM INPUT DATA AKUN & PROMO (QRIS BELUM MUNCUL) */
             <>
-              {/* Product Price Summary Banner with Admin Fee & Promo */}
+              {/* Product Price Summary Banner */}
               <div className="p-3.5 rounded-xl bg-slate-900/90 border border-cyan-500/20 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-[11px] text-slate-400">Total Pembayaran:</div>
+                    <div className="text-[11px] text-slate-400">Estimasi Total Bayar:</div>
                     <div className="font-heading font-extrabold text-2xl text-cyan-400">
                       {storeService.formatRupiah(finalPrice)}
                     </div>
@@ -379,11 +533,11 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di ch
 
                 {/* Price Breakdown */}
                 <div className="text-[11px] text-slate-400 pt-1.5 border-t border-white/10 flex flex-wrap items-center justify-between gap-1">
-                  <span>Harga: {storeService.formatRupiah(rawPrice)}</span>
+                  <span>Harga Produk: {storeService.formatRupiah(rawPrice)}</span>
                   <span>+ Biaya Admin: <strong className="text-slate-200">Rp 500</strong></span>
                   {appliedPromo && (
                     <span className="text-emerald-400 font-semibold">
-                      - Diskon: {storeService.formatRupiah(discountAmount)} ({appliedPromo.discountPercent}%)
+                      - Diskon Promo: {storeService.formatRupiah(discountAmount)} ({appliedPromo.discountPercent}%)
                     </span>
                   )}
                 </div>
@@ -397,7 +551,7 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di ch
                 </div>
               )}
 
-              {/* Form Input Data Target Akun (FR-03 + Email) */}
+              {/* Form Input Data Target Akun */}
               <div className="space-y-3">
                 <div className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">
                   1. Masukkan Data Akun & Kontak
@@ -462,12 +616,12 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di ch
                   </div>
                 </div>
 
-                {/* Input Kode Promo / Diskon */}
+                {/* Input Kode Promo / Diskon (Opsional - Bisa dikosongkan) */}
                 <div className="form-group !mb-0 pt-1">
                   <label className="form-label">
                     <span className="flex items-center gap-1.5 text-xs text-slate-300">
                       <Tag className="w-3.5 h-3.5 text-cyan-400" />
-                      Punya Kode Promo / Kupon Diskon?
+                      Kode Promo / Diskon <span className="text-[10px] text-slate-500 font-normal">(Opsional - Kosongkan jika tidak ada)</span>
                     </span>
                   </label>
                   
@@ -475,7 +629,7 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di ch
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Contoh: indonesiastore / 4storezhafran"
+                        placeholder="Contoh: indonesiastore / 4storezhafran (Opsional)"
                         value={promoCodeInput}
                         onChange={(e) => setPromoCodeInput(e.target.value)}
                         className="form-input text-xs uppercase font-mono"
@@ -510,7 +664,7 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di ch
                 </div>
               </div>
 
-              {/* Payment Method Selector (FR-04) */}
+              {/* Payment Method Selector */}
               <div className="space-y-3 pt-2">
                 <div className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">
                   2. Pilih Metode Pembayaran
@@ -545,116 +699,25 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya sertakan di ch
                   </button>
                 </div>
 
-                {/* Group 1: QRIS Display (FR-05 + Dual Options: Tanpa Chat vs Bisa di Chat) */}
+                {/* ACTION FOR QRIS: TEKAN BAYAR SEKARANG BARU MUNCUL QRIS */}
                 {paymentGroup === 'qris' && (
-                  <div className="p-4 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-4 animate-fadeIn">
-                    
-                    <div className="text-center space-y-1">
-                      <div className="text-xs text-slate-300 font-medium">
-                        Scan QRIS di bawah ini dengan GoPay, OVO, DANA, BCA, ShopeePay, atau Mobile Banking:
-                      </div>
-                      <div className="text-xs font-mono font-bold text-cyan-400">
-                        Merchant: {storeSettings?.store_name || "Zhafranstore.id"}
-                      </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleProceedToQRIS}
+                      className="w-full btn-primary py-3.5 rounded-xl font-heading font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/30"
+                    >
+                      <QrCode className="w-4 h-4 text-slate-950" />
+                      <span>Bayar Sekarang (Tampilkan QRIS)</span>
+                      <ArrowRight className="w-4 h-4 text-slate-950" />
+                    </button>
+                    <div className="text-center text-[10px] text-slate-400 mt-1.5">
+                      Klik tombol di atas untuk memunculkan foto QRIS resmi dan menyelesaikan pembayaran.
                     </div>
-
-                    {/* QRIS Image Container */}
-                    <div className="relative mx-auto w-56 sm:w-64 p-3 bg-white rounded-2xl shadow-xl flex flex-col items-center">
-                      <div className="text-[11px] font-black tracking-widest text-slate-900 mb-1">
-                        QRIS PEMBAYARAN RESMI
-                      </div>
-                      <img 
-                        src={qrisImage} 
-                        alt="QRIS Pembayaran Zhafranstore.id"
-                        className="w-full aspect-square object-contain rounded-lg"
-                      />
-                      <div className="mt-2 text-center">
-                        <div className="text-[10px] text-slate-600 font-bold">TOTAL HARGA + ADMIN:</div>
-                        <div className="font-mono font-black text-slate-950 text-base">
-                          {storeService.formatRupiah(finalPrice)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Download QRIS Button */}
-                    <div className="flex justify-center">
-                      <button
-                        type="button"
-                        onClick={handleDownloadQRIS}
-                        className="btn-secondary text-xs py-2 px-4 rounded-lg flex items-center gap-1.5"
-                      >
-                        <Download className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Unduh Gambar QRIS</span>
-                      </button>
-                    </div>
-
-                    {/* Upload Bukti Transfer */}
-                    <div className="space-y-2 pt-2 border-t border-white/10">
-                      <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                        <span>Unggah Bukti Transfer:</span>
-                      </label>
-
-                      <div className="relative flex items-center justify-center p-3 border-2 border-dashed border-white/20 hover:border-cyan-400/50 rounded-xl bg-slate-950/60 transition cursor-pointer">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileChange}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        />
-                        {proofPreview ? (
-                          <div className="flex items-center gap-3">
-                            <img 
-                              src={proofPreview} 
-                              alt="Bukti Preview" 
-                              className="w-12 h-12 object-cover rounded-lg border border-cyan-400/40" 
-                            />
-                            <div className="text-left text-xs">
-                              <div className="text-cyan-300 font-medium">Bukti terpasang ✓</div>
-                              <div className="text-slate-400 text-[10px]">Klik untuk mengganti foto</div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <Upload className="w-4 h-4 text-cyan-400" />
-                            <span>Pilih foto bukti bayar dari galeri/PC</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* DUAL ACTION BUTTONS: TANPA CHAT ATAU BISA DI CHAT */}
-                    <div className="pt-2 space-y-2">
-                      <div className="text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                        Pilih Opsi Konfirmasi Pesanan:
-                      </div>
-
-                      {/* Tombol 1: Bisa di Chat via WhatsApp */}
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={() => handleConfirmQRIS(true)}
-                        className="w-full btn-whatsapp py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25"
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                        <span>{isSubmitting ? 'Memproses...' : 'Konfirmasi via Chat WhatsApp (Rekomendasi)'}</span>
-                      </button>
-
-                      {/* Tombol 2: Tanpa Chat (Otomatis Web) */}
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={() => handleConfirmQRIS(false)}
-                        className="w-full btn-primary py-3 rounded-xl font-heading font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                        <span>{isSubmitting ? 'Memproses...' : 'Selesaikan Otomatis (Tanpa di Chat)'}</span>
-                      </button>
-                    </div>
-
                   </div>
                 )}
 
-                {/* Group 2: E-Commerce / Marketplace (FR-06) */}
+                {/* Group 2: E-Commerce / Marketplace */}
                 {paymentGroup === 'marketplace' && (
                   <div className="p-4 rounded-xl bg-slate-900/90 border border-violet-500/30 space-y-3 animate-fadeIn">
                     <div className="text-xs text-slate-300 leading-relaxed">

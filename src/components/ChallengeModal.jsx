@@ -13,13 +13,20 @@ import {
   AlertCircle,
   Percent,
   Flame,
-  HelpCircle
+  HelpCircle,
+  Gift,
+  Clock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { storeService } from '../services/storeService.js';
 
 export default function ChallengeModal({ isOpen, onClose, storeSettings, showToast }) {
   if (!isOpen) return null;
+
+  // Events created by Admin
+  const [events, setEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [loadingEvents, setLoadingEvents] = useState(true);
 
   // Participant Bio Random Code
   const [participantCode, setParticipantCode] = useState(() => {
@@ -35,7 +42,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
   const [copiedCode, setCopiedCode] = useState(false);
 
   // Form claim states
-  const [platform, setPlatform] = useState('tiktok'); // tiktok, youtube, instagram, other
+  const [platform, setPlatform] = useState('tiktok'); // tiktok, youtube, instagram
   const [accountHandle, setAccountHandle] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [viewsCount, setViewsCount] = useState('1000');
@@ -43,6 +50,28 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedClaim, setSubmittedClaim] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Fetch admin events on modal open
+  useEffect(() => {
+    if (isOpen) {
+      fetchEvents();
+      setSubmittedClaim(null);
+      setErrorMsg('');
+    }
+  }, [isOpen]);
+
+  const fetchEvents = async () => {
+    setLoadingEvents(true);
+    const list = await storeService.getEvents();
+    const activeList = list.filter(e => e.is_active);
+    setEvents(activeList);
+    if (activeList.length > 0) {
+      setSelectedEventId(activeList[0].id);
+    }
+    setLoadingEvents(false);
+  };
+
+  const currentEvent = events.find(e => e.id === selectedEventId) || events[0];
 
   const generateNewCode = () => {
     const rand = Math.floor(1000 + Math.random() * 9000);
@@ -70,7 +99,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
       return;
     }
     if (!whatsappNumber.trim()) {
-      setErrorMsg("Harap masukkan nomor WhatsApp aktif untuk pengiriman voucher hadiah.");
+      setErrorMsg("Harap masukkan nomor WhatsApp aktif untuk pengiriman voucher/hadiah.");
       return;
     }
 
@@ -79,13 +108,16 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
 
     try {
       const payload = {
+        event_id: currentEvent?.id || 'general',
+        event_title: currentEvent?.title || 'Challenge Hadiah Zhafranstore',
+        reward_type: currentEvent?.reward_type || 'discount',
+        reward_value: currentEvent?.reward_value || 'Diskon / Hadiah Spesial',
         platform,
         accountHandle,
         videoUrl,
-        viewsCount: Number(viewsCount) || 1000,
+        viewsCount: Number(viewsCount) || (currentEvent?.min_views || 1000),
         whatsappNumber,
         participantCode,
-        rewardRequested: "Diskon Promo 10% - 25% Zhafranstore",
         created_at: new Date().toISOString()
       };
 
@@ -98,7 +130,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
         origin: { y: 0.5 }
       });
 
-      if (showToast) showToast("Klaim Challenge 1K Views berhasil dikirim!");
+      if (showToast) showToast("Klaim Challenge berhasil dikirim!");
     } catch (err) {
       console.error("Challenge submit error:", err);
       setErrorMsg("Gagal mengirim klaim. Silakan coba lagi.");
@@ -120,14 +152,14 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-heading font-black text-white text-base sm:text-lg">
-                  Event Challenge Video & Hadiah Diskon
+                  Event & Challenge Hadiah
                 </h3>
                 <span className="badge badge-amber text-[10px] animate-pulse">
-                  🔥 1K Views
+                  Event Resmi Toko
                 </span>
               </div>
               <p className="text-[11px] text-slate-300">
-                Buat video tentang Zhafranstore.id, dapatkan 1.000 penonton & menangkan voucher diskon s/d 25%!
+                Ikuti event dan tantangan resmi dari Admin untuk memenangkan diskon & produk game gratis!
               </p>
             </div>
           </div>
@@ -143,7 +175,36 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
         {/* Body */}
         <div className="modal-body space-y-5 overflow-y-auto">
           
-          {submittedClaim ? (
+          {loadingEvents ? (
+            <div className="py-12 text-center text-slate-400 text-xs">
+              Memeriksa event aktif dari Admin...
+            </div>
+          ) : events.length === 0 ? (
+            /* JIKA BELUM ADA EVENT YANG DIBUAT ADMIN */
+            <div className="py-12 px-6 text-center space-y-4 max-w-md mx-auto">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                <Clock className="w-7 h-7" />
+              </div>
+              <div>
+                <h4 className="font-heading font-bold text-lg text-white">Belum Ada Event Aktif</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Saat ini belum ada event atau challenge hadiah yang dibuka oleh Admin Zhafranstore.id.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-400 text-left space-y-1">
+                <div className="font-bold text-cyan-300">💡 Belanja Tetap Hemat!</div>
+                <div>Kamu tetap bisa mendapatkan diskon saat checkout dengan kode promo toko seperti: <code className="text-emerald-400 font-bold bg-slate-950 px-1 py-0.5 rounded">indonesiastore</code> atau <code className="text-emerald-400 font-bold bg-slate-950 px-1 py-0.5 rounded">4storezhafran</code>!</div>
+              </div>
+
+              <button
+                onClick={onClose}
+                className="btn-primary text-xs py-2.5 px-6 rounded-xl"
+              >
+                Kembali ke Toko
+              </button>
+            </div>
+          ) : submittedClaim ? (
             /* SUCCESS CLAIM SCREEN */
             <div className="text-center py-6 space-y-4">
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto animate-bounce">
@@ -155,7 +216,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                   Klaim Challenge Berhasil Dikirim!
                 </h4>
                 <p className="text-xs text-slate-300 mt-1 max-w-md mx-auto leading-relaxed">
-                  Tim Admin Zhafranstore.id sedang memverifikasi video kamu (minimal 1K views & kode unik di Bio). Kode voucher diskon akan dikirimkan langsung ke nomor WhatsApp kamu:
+                  Tim Admin Zhafranstore.id sedang memverifikasi video kamu. Hadiah akan dikirimkan langsung ke nomor WhatsApp kamu:
                 </p>
               </div>
 
@@ -165,8 +226,8 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                   <span className="font-mono font-bold text-cyan-400">{submittedClaim.id}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Platform:</span>
-                  <span className="font-bold uppercase text-white">{submittedClaim.platform}</span>
+                  <span className="text-slate-400">Event:</span>
+                  <span className="font-bold text-white">{submittedClaim.event_title}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Akun:</span>
@@ -178,12 +239,8 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Status Verifikasi:</span>
-                  <span className="badge badge-amber text-[10px]">Sedang Ditinjau Admin</span>
+                  <span className="badge badge-amber text-[10px]">Menunggu Verifikasi Admin</span>
                 </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 max-w-md mx-auto text-xs text-cyan-300">
-                💡 <strong>Tips Tambahan:</strong> Sambil menunggu verifikasi, kamu juga bisa langsung memakai kode diskon promo yang aktif di toko kami saat checkout: <code className="font-bold text-white bg-slate-950 px-1.5 py-0.5 rounded">indonesiastore</code> atau <code className="font-bold text-white bg-slate-950 px-1.5 py-0.5 rounded">4storezhafran</code>!
               </div>
 
               <button
@@ -194,15 +251,57 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
               </button>
             </div>
           ) : (
+            /* EVENT TERSEDIA DARI ADMIN */
             <>
+              {/* Event Selector if multiple */}
+              {events.length > 1 && (
+                <div className="form-group !mb-0">
+                  <label className="form-label">Pilih Event yang Diikuti:</label>
+                  <select
+                    value={selectedEventId}
+                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    className="form-select text-xs"
+                  >
+                    {events.map(evt => (
+                      <option key={evt.id} value={evt.id}>
+                        {evt.title} ({evt.reward_value})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* DETAIL EVENT DARI ADMIN */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 to-slate-900/90 border border-amber-500/30 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-heading font-black text-white text-base">
+                    {currentEvent?.title}
+                  </h4>
+                  <span className="badge badge-emerald text-[10px]">
+                    🎁 Hadiah: {currentEvent?.reward_value}
+                  </span>
+                </div>
+
+                <div className="text-xs text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
+                  <span>Platform: <strong className="text-white">{currentEvent?.platform}</strong></span>
+                  <span>Minimal Penonton: <strong className="text-cyan-300">{currentEvent?.min_views || 1000}+ views</strong></span>
+                </div>
+
+                {currentEvent?.description && (
+                  <p className="text-xs text-slate-300 bg-slate-950/60 p-3 rounded-lg border border-white/5 leading-relaxed">
+                    {currentEvent.description}
+                  </p>
+                )}
+              </div>
+
               {/* STEP 1: KODE UNIK BIO */}
-              <div className="p-4 rounded-xl bg-slate-900/90 border border-amber-500/30 space-y-3">
+              <div className="p-4 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <span className="badge badge-amber text-[10px] mb-1">Langkah 1 (Wajib)</span>
-                    <h4 className="font-heading font-bold text-white text-sm">
-                      Kode Unik Verifikasi Bio Kamu:
-                    </h4>
+                    <span className="badge badge-cyan text-[10px] mb-1">Langkah 1: Pasang Kode di Bio Akun</span>
+                    <h5 className="font-heading font-bold text-white text-xs sm:text-sm">
+                      Kode Unik Verifikasi Kamu:
+                    </h5>
                   </div>
                   <button
                     onClick={generateNewCode}
@@ -212,7 +311,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 p-2.5 bg-slate-950 border border-white/10 rounded-xl">
+                <div className="flex items-center gap-2 p-2 bg-slate-950 border border-white/10 rounded-xl">
                   <span className="font-mono font-black text-amber-300 text-sm sm:text-base tracking-wider flex-1 px-2 select-all">
                     {participantCode}
                   </span>
@@ -226,46 +325,15 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                 </div>
 
                 <div className="text-[11px] text-slate-300 leading-relaxed">
-                  ⚠️ <strong>Penting:</strong> Salin kode di atas dan tempelkan ke <strong>Bio profil TikTok, YouTube, atau Instagram</strong> kamu sebelum mengirimkan klaim hadiah agar terbukti sebagai pemilik sah video.
+                  Pasang kode di atas pada <strong>Bio akun {currentEvent?.platform}</strong> kamu agar admin dapat mengonfirmasi kepemilikan video saat verifikasi.
                 </div>
               </div>
 
-              {/* STEP 2: PANDUAN CARA IKUT */}
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-white/10 space-y-3">
-                <h4 className="font-heading font-bold text-white text-sm flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
-                  <span>Panduan Cara Ikut & Syarat Challenge</span>
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-white/5 space-y-1">
-                    <div className="font-bold text-cyan-400">1. Pasang Kode di Bio</div>
-                    <p className="text-slate-400 text-[11px] leading-relaxed">
-                      Tempelkan kode unik kamu di bio TikTok, YouTube, atau Instagram.
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-white/5 space-y-1">
-                    <div className="font-bold text-violet-400">2. Buat & Upload Video</div>
-                    <p className="text-slate-400 text-[11px] leading-relaxed">
-                      Review gamepass/game, gameplay, atau promo belanja hemat di Zhafranstore.id.
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-slate-950/60 border border-white/5 space-y-1">
-                    <div className="font-bold text-emerald-400">3. Raih 1K Views & Klaim</div>
-                    <p className="text-slate-400 text-[11px] leading-relaxed">
-                      Capai 1.000 penonton, masukkan link video kamu di bawah, dan raih diskon promo!
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* STEP 3: FORMULIR KLAIM HADIAH */}
+              {/* FORMULIR KLAIM HADIAH */}
               <form onSubmit={handleSubmitClaim} className="space-y-4">
-                <div className="font-heading font-bold text-white text-sm flex items-center gap-2">
+                <div className="font-heading font-bold text-white text-xs sm:text-sm flex items-center gap-2">
                   <Send className="w-4 h-4 text-emerald-400" />
-                  <span>Formulir Pengajuan Klaim Hadiah</span>
+                  <span>Langkah 2: Isi Formulir Klaim Hadiah</span>
                 </div>
 
                 {errorMsg && (
@@ -275,45 +343,23 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                   </div>
                 )}
 
-                {/* Pilih Platform */}
                 <div className="form-group !mb-0">
-                  <label className="form-label">Pilih Platform Media Sosial *</label>
+                  <label className="form-label">Platform Video Konten *</label>
                   <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPlatform('tiktok')}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                        platform === 'tiktok'
-                          ? 'bg-pink-500/20 border-pink-500 text-pink-300'
-                          : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span>TikTok</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setPlatform('youtube')}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                        platform === 'youtube'
-                          ? 'bg-rose-500/20 border-rose-500 text-rose-300'
-                          : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span>YouTube</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setPlatform('instagram')}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                        platform === 'instagram'
-                          ? 'bg-purple-500/20 border-purple-500 text-purple-300'
-                          : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span>Instagram</span>
-                    </button>
+                    {['tiktok', 'youtube', 'instagram'].map(plat => (
+                      <button
+                        key={plat}
+                        type="button"
+                        onClick={() => setPlatform(plat)}
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition uppercase ${
+                          platform === plat
+                            ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
+                            : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {plat}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -324,7 +370,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                     </label>
                     <input
                       type="text"
-                      placeholder={`Contoh: @zhafran_gamer / ${platform}_id`}
+                      placeholder={`Contoh: @akun_${platform}`}
                       value={accountHandle}
                       onChange={(e) => setAccountHandle(e.target.value)}
                       className="form-input text-xs"
@@ -334,15 +380,15 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
 
                   <div className="form-group !mb-0">
                     <label className="form-label">
-                      <span>Estimasi Jumlah Views Saat Ini *</span>
+                      <span>Jumlah Penonton / Views Saat Ini *</span>
                     </label>
                     <input
                       type="number"
-                      placeholder="Contoh: 1200"
+                      placeholder="Contoh: 1250"
                       value={viewsCount}
                       onChange={(e) => setViewsCount(e.target.value)}
                       className="form-input text-xs"
-                      min="1000"
+                      min={currentEvent?.min_views || 1000}
                       required
                     />
                   </div>
@@ -350,11 +396,11 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
 
                 <div className="form-group !mb-0">
                   <label className="form-label">
-                    <span>Tautan / URL Video Konten (Min. 1K Views) *</span>
+                    <span>Tautan / Link Video Konten *</span>
                   </label>
                   <input
                     type="url"
-                    placeholder={`https://${platform === 'tiktok' ? 'tiktok.com/@user/video/...' : platform === 'youtube' ? 'youtube.com/shorts/...' : 'instagram.com/reel/...'}`}
+                    placeholder="https://..."
                     value={videoUrl}
                     onChange={(e) => setVideoUrl(e.target.value)}
                     className="form-input text-xs"
@@ -365,7 +411,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                 <div className="form-group !mb-0">
                   <label className="form-label">
                     <span>Nomor WhatsApp Aktif Kamu *</span>
-                    <span className="text-[10px] text-slate-400">Untuk menerima voucher diskon</span>
+                    <span className="text-[10px] text-slate-400">Untuk menerima voucher/hadiah</span>
                   </label>
                   <input
                     type="tel"
@@ -383,7 +429,7 @@ export default function ChallengeModal({ isOpen, onClose, storeSettings, showToa
                   className="w-full btn-primary py-3 rounded-xl font-heading font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
                 >
                   <Trophy className="w-4 h-4 text-slate-950" />
-                  <span>{isSubmitting ? 'Mengirimkan Klaim...' : 'Kirim Klaim Challenge 1K Views'}</span>
+                  <span>{isSubmitting ? 'Mengirimkan Klaim...' : 'Klaim Hadiah Event Sekarang'}</span>
                 </button>
               </form>
             </>

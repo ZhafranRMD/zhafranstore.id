@@ -18,7 +18,8 @@ const LOCAL_STORAGE_KEYS = {
   PRODUCTS: "zhafranstore_products",
   SETTINGS: "zhafranstore_settings",
   ORDERS: "zhafranstore_orders",
-  CHALLENGES: "zhafranstore_challenges"
+  CHALLENGES: "zhafranstore_challenges",
+  EVENTS: "zhafranstore_events"
 };
 
 // Helper: safe local storage read
@@ -273,6 +274,20 @@ export const storeService = {
     return true;
   },
 
+  async deleteOrder(orderId) {
+    let localOrders = getLocalData(LOCAL_STORAGE_KEYS.ORDERS, []);
+    localOrders = localOrders.filter(o => o.id !== orderId);
+    setLocalData(LOCAL_STORAGE_KEYS.ORDERS, localOrders);
+
+    try {
+      const docRef = getAppDoc("orders", orderId);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.warn("Firestore deleteOrder error:", err.message);
+    }
+    return true;
+  },
+
   // 4. EVENT & CHALLENGE REWARDS MANAGEMENT
   async submitChallenge(challengePayload) {
     const claimId = `CHL-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
@@ -343,6 +358,84 @@ export const storeService = {
       console.warn("Firestore updateChallengeStatus error:", err.message);
     }
 
+    return true;
+  },
+
+  async deleteChallenge(challengeId) {
+    let localChallenges = getLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, []);
+    localChallenges = localChallenges.filter(c => c.id !== challengeId);
+    setLocalData(LOCAL_STORAGE_KEYS.CHALLENGES, localChallenges);
+
+    try {
+      const docRef = getAppDoc("challenges", challengeId);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.warn("Firestore deleteChallenge error:", err.message);
+    }
+    return true;
+  },
+
+  // 5. ADMIN CREATED EVENTS & HADIAH
+  async getEvents() {
+    let events = getLocalData(LOCAL_STORAGE_KEYS.EVENTS, null);
+    try {
+      const colRef = getAppCollection("events");
+      const q = query(colRef, limit(50));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setLocalData(LOCAL_STORAGE_KEYS.EVENTS, events);
+        return events;
+      }
+    } catch (err) {
+      console.warn("Firestore getEvents fallback:", err.message);
+    }
+
+    if (!events) {
+      events = [];
+      setLocalData(LOCAL_STORAGE_KEYS.EVENTS, events);
+    }
+    return events;
+  },
+
+  async saveEvent(eventData) {
+    const eventId = eventData.id || `evt-${Date.now()}`;
+    const payload = {
+      ...eventData,
+      id: eventId,
+      is_active: eventData.is_active !== undefined ? eventData.is_active : true,
+      updatedAt: new Date().toISOString()
+    };
+
+    let localEvents = getLocalData(LOCAL_STORAGE_KEYS.EVENTS, []);
+    const idx = localEvents.findIndex(e => e.id === eventId);
+    if (idx >= 0) {
+      localEvents[idx] = payload;
+    } else {
+      localEvents.unshift(payload);
+    }
+    setLocalData(LOCAL_STORAGE_KEYS.EVENTS, localEvents);
+
+    try {
+      const docRef = getAppDoc("events", eventId);
+      await setDoc(docRef, { ...payload, updatedAt: serverTimestamp() }, { merge: true });
+    } catch (err) {
+      console.warn("Firestore saveEvent error:", err.message);
+    }
+    return payload;
+  },
+
+  async deleteEvent(eventId) {
+    let localEvents = getLocalData(LOCAL_STORAGE_KEYS.EVENTS, []);
+    localEvents = localEvents.filter(e => e.id !== eventId);
+    setLocalData(LOCAL_STORAGE_KEYS.EVENTS, localEvents);
+
+    try {
+      const docRef = getAppDoc("events", eventId);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.warn("Firestore deleteEvent error:", err.message);
+    }
     return true;
   }
 };
