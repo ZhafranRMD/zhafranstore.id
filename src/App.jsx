@@ -8,6 +8,7 @@ import AdminModal from './components/AdminModal.jsx';
 import OrderTrackerModal from './components/OrderTrackerModal.jsx';
 import Toast from './components/Toast.jsx';
 import { storeService } from './services/storeService.js';
+import { initialProducts, initialStoreSettings } from './data/initialProducts.js';
 import { 
   Gamepad2, 
   ShieldCheck, 
@@ -20,9 +21,26 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [products, setProducts] = useState([]);
-  const [storeSettings, setStoreSettings] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Instant Initial State (Zero Loading Delay)
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('zhafranstore_products');
+      return cached ? JSON.parse(cached) : initialProducts;
+    } catch {
+      return initialProducts;
+    }
+  });
+
+  const [storeSettings, setStoreSettings] = useState(() => {
+    try {
+      const cached = localStorage.getItem('zhafranstore_settings');
+      return cached ? JSON.parse(cached) : initialStoreSettings;
+    } catch {
+      return initialStoreSettings;
+    }
+  });
+
+  const [loading, setLoading] = useState(false);
 
   // Filter & Search States
   const [activeCategory, setActiveCategory] = useState('all'); // 'all' | 'game' | 'gamepass'
@@ -44,24 +62,21 @@ export default function App() {
     }, 3500);
   };
 
-  // Load Initial Data
+  // Sync Data with Firestore in background
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const [prods, settings] = await Promise.all([
         storeService.getProducts(),
         storeService.getStoreSettings()
       ]);
-      setProducts(prods);
-      setStoreSettings(settings);
+      if (prods && prods.length > 0) setProducts(prods);
+      if (settings) setStoreSettings(settings);
     } catch (e) {
-      console.error("Initial load error:", e);
-    } finally {
-      setLoading(false);
+      console.warn("Background sync note:", e);
     }
   };
 

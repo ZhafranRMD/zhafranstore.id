@@ -22,7 +22,7 @@ Platform toko digital mandiri (*self-hosted webstore*) modern bertema **Dark Gam
 
 ## 🔑 Kredensial & Akses Admin Panel
 - **Akses Dashboard Admin**: Klik tombol **"Admin"** di bagian kanan atas *header*.
-- **Default PIN Admin**: `zhafran2026` (atau `admin123`).
+- **Kode Rahasia Admin**: Khusus pemilik toko Zhafranstore.id (*Secret & Confidential*).
 
 ---
 

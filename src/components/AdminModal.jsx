@@ -89,16 +89,16 @@ export default function AdminModal({
     setOrders(list);
   };
 
-  // Handle PIN Login
+  // Handle Secret Admin Login
   const handleLogin = (e) => {
     e.preventDefault();
-    if (pinInput === 'zhafran2026' || pinInput === 'admin123') {
+    if (pinInput.trim() === 'zhafranstoreindonesia') {
       setIsAuthenticated(true);
       sessionStorage.setItem('zhafran_admin_auth', 'true');
       setPinError('');
       loadOrders();
     } else {
-      setPinError('PIN salah! Silakan masukkan PIN admin yang benar (Default: zhafran2026).');
+      setPinError('Kode akses tidak valid. Akses ditolak.');
     }
   };
 
@@ -279,23 +279,23 @@ export default function AdminModal({
               <Lock className="w-7 h-7" />
             </div>
             <div>
-              <h4 className="font-heading font-bold text-lg text-white">Masukkan PIN Admin</h4>
+              <h4 className="font-heading font-bold text-lg text-white">Verifikasi Akses Admin</h4>
               <p className="text-xs text-slate-400 mt-1">
-                Akses khusus pemilik Zhafranstore.id
+                Masukkan kode rahasia pemilik toko untuk melanjutkan
               </p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-3">
               <input
                 type="password"
-                placeholder="Masukkan PIN (Default: zhafran2026)"
+                placeholder="Masukkan Kode Rahasia"
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value)}
-                className="form-input text-center text-base tracking-widest"
+                className="form-input text-center text-sm tracking-wider"
                 autoFocus
               />
               {pinError && (
-                <div className="text-xs text-rose-400">{pinError}</div>
+                <div className="text-xs text-rose-400 font-medium">{pinError}</div>
               )}
               <button type="submit" className="w-full btn-primary text-sm py-2.5">
                 Buka Dashboard

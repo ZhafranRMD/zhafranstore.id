@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   initializeFirestore, 
+  getFirestore,
   persistentLocalCache, 
   persistentMultipleTabManager,
   collection,
@@ -29,9 +30,11 @@ try {
     })
   });
 } catch (e) {
-  console.warn("Firestore persistent cache fallback:", e);
-  // Fallback to existing or default initialization if already initialized
-  firestoreDb = initializeFirestore(app, {});
+  try {
+    firestoreDb = getFirestore(app);
+  } catch (err) {
+    console.warn("Firestore initialization fallback:", err);
+  }
 }
 
 export const db = firestoreDb;
