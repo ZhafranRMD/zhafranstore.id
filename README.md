@@ -30,8 +30,18 @@ Platform toko digital mandiri (*self-hosted webstore*) modern bertema **Dark Gam
 
 ---
 
-## 🚀 Cara Menjalankan Proyek di Komputer Lokal
+## 🚀 Cara Cepat & Akses Aplikasi
 
+### 1. Jalankan Langsung di Windows (1-Click Launcher)
+Cukup **klik ganda (double-click)** salah satu berkas batch berikut di dalam folder proyek:
+- ⚡ **`Buka_Aplikasi.bat`** (Rekomendasi Utama: otomatis menyalakan server lokal Vite dan membuka browser)
+- ⚡ **`Jalankan_Zhafranstore.bat`**
+
+> **Catatan Teknis Pembukaan `index.html`**:
+> Aplikasi ini dibangun dengan arsitektur modern **React + Vite** yang menggunakan *ES Modules* (`<script type="module">`). Jika file `index.html` dibuka langsung dari File Explorer melalui protokol `file:///`, browser akan memblokir modul JavaScript demi alasan keamanan.
+> Kini `index.html` telah dilengkapi **Smart Protocol Handler**: jika dibuka secara langsung (`file:///`), halaman akan secara otomatis mengecek ketersediaan server lokal (`http://localhost:5173/`) untuk auto-redirect, atau menampilkan petunjuk interaktif untuk menjalankan `Buka_Aplikasi.bat`.
+
+### 2. Jalankan Manual via Terminal
 ```bash
 # Masuk ke direktori proyek
 cd "d:\devproject\zhafranstore.id"
@@ -42,8 +52,12 @@ npm run dev
 # Membangun bundle produksi (Production Build)
 npm run build
 ```
+Aplikasi lokal dapat diakses di: **`http://localhost:5173/`**
 
-Aplikasi dapat langsung diakses di browser pada: **`http://localhost:5173/`**
+### 3. Akses Online (Cloudflare Live Deployment)
+- 🌐 **Production URL (Cloudflare Workers)**: [https://zhafranstore.zhafranramadhan.workers.dev](https://zhafranstore.zhafranramadhan.workers.dev)
+- 🌐 **Alternative URL**: [https://zhafranstore-id.zhafranramadhan.workers.dev](https://zhafranstore-id.zhafranramadhan.workers.dev)
+- 🐙 **GitHub Repository**: [https://github.com/ZhafranRMD/zhafranstore.id](https://github.com/ZhafranRMD/zhafranstore.id)
 
 ---
 

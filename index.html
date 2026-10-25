@@ -2,9 +2,9 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="manifest" href="./manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
     <meta name="theme-color" content="#07090E" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -22,6 +22,56 @@
   </head>
   <body class="bg-[#07090E] text-slate-100 antialiased selection:bg-cyan-500 selection:text-black">
     <div id="root"></div>
+
+    <!-- Smart Protocol & Fallback Detection -->
+    <script>
+      (function() {
+        if (window.location.protocol === 'file:') {
+          // Jika dibuka langsung via double-click file://, cek apakah dev server lokal aktif
+          fetch('http://localhost:5173/', { mode: 'no-cors' })
+            .then(function() {
+              window.location.replace('http://localhost:5173/');
+            })
+            .catch(function() {
+              var root = document.getElementById('root');
+              if (root) {
+                root.innerHTML = `
+                  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at top,#0f172a,#020617);font-family:'Outfit',sans-serif;color:#f8fafc;padding:24px;">
+                    <div style="max-width:560px;width:100%;background:rgba(15,23,42,0.85);backdrop-filter:blur(20px);border:1px solid rgba(6,182,212,0.3);border-radius:24px;padding:36px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.7),0 0 40px rgba(6,182,212,0.15);text-align:center;">
+                      <div style="width:72px;height:72px;margin:0 auto 20px;background:linear-gradient(135deg,#06b6d4,#3b82f6);border-radius:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 25px rgba(6,182,212,0.5);">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="15" x2="15.01" y1="13" y2="13"/><line x1="18" x2="18.01" y1="11" y2="11"/><rect width="20" height="12" x="2" y="6" rx="6"/></svg>
+                      </div>
+                      <h1 style="font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-bottom:8px;background:linear-gradient(to right,#38bdf8,#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Zhafranstore.id</h1>
+                      <p style="color:#94a3b8;font-size:15px;margin-bottom:24px;line-height:1.6;">Aplikasi ini berbasis web application modern (React + Vite + Firebase) yang membutuhkan server lokal aktif.</p>
+                      
+                      <div style="background:rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;text-align:left;margin-bottom:24px;">
+                        <div style="font-size:13px;font-weight:700;color:#38bdf8;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">💡 Cara Membuka Aplikasi:</div>
+                        <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">
+                          <div style="width:24px;height:24px;border-radius:50%;background:#0284c7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">1</div>
+                          <div style="font-size:14px;color:#e2e8f0;line-height:1.4;">Klik dua kali berkas <strong style="color:#38bdf8;">Buka_Aplikasi.bat</strong> di folder <code style="background:#1e293b;padding:2px 6px;border-radius:4px;font-size:12px;">d:\\devproject\\zhafranstore.id</code>.</div>
+                        </div>
+                        <div style="display:flex;align-items:flex-start;gap:12px;">
+                          <div style="width:24px;height:24px;border-radius:50%;background:#0284c7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">2</div>
+                          <div style="font-size:14px;color:#e2e8f0;line-height:1.4;">Browser akan langsung terbuka secara otomatis ke <strong style="color:#22c55e;">http://localhost:5173/</strong>.</div>
+                        </div>
+                      </div>
+
+                      <div style="display:flex;flex-direction:column;gap:12px;">
+                        <a href="http://localhost:5173/" target="_blank" style="display:block;width:100%;padding:14px;background:linear-gradient(135deg,#06b6d4,#2563eb);color:#020617;font-weight:800;font-size:15px;border-radius:12px;text-decoration:none;box-shadow:0 4px 15px rgba(6,182,212,0.4);">
+                          🚀 Buka Server Lokal (http://localhost:5173)
+                        </a>
+                        <a href="https://zhafranstore.zhafranramadhan.workers.dev" target="_blank" style="display:block;width:100%;padding:13px;background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.15);color:#f8fafc;font-weight:600;font-size:14px;border-radius:12px;text-decoration:none;">
+                          🌐 Buka Toko Online Live (Cloudflare)
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
+            });
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
