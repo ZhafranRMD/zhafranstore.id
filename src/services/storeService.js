@@ -93,6 +93,26 @@ function setLocalData(key, data) {
   } catch (e) {}
 }
 
+// Cloudflare D1 Edge API Helper
+const API_BASE = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://store.zhafranstudio.my.id';
+
+export async function fetchD1(endpoint, options = {}) {
+  try {
+    const res = await fetch(`${API_BASE}/api${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-key': 'zhafranstoreid',
+        ...options.headers
+      }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
 export const storeService = {
   // Format mata uang Rupiah
   formatRupiah(number) {
@@ -121,40 +141,29 @@ export const storeService = {
     return `mailto:${targetEmail}?subject=${encodeURIComponent(subject || 'Tanya Admin Zhafranstore.id')}&body=${encodeURIComponent(body || '')}`;
   },
 
-  // 1. PRODUCTS MANAGEMENT
+  // 1. PRODUCTS MANAGEMENT WITH CLOUDFLARE D1
   async getProducts() {
-    let products = getLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, null);
-
-    try {
-      const colRef = getAppCollection("products");
-      const q = query(colRef, limit(100));
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        products = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            stock: data.stock !== undefined ? Number(data.stock) : 999
-          };
-        });
-        setLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, products);
-        return products;
-      }
-    } catch (err) {
-      console.warn("Firestore getProducts fallback to local:", err.message);
+    // 1. Coba ambil dari Cloudflare D1 Database Edge
+    const d1Products = await fetchD1('/products');
+    if (d1Products && Array.isArray(d1Products) && d1Products.length > 0) {
+      const formatted = d1Products.map(p => ({
+        ...p,
+        stock: p.stock !== undefined ? Number(p.stock) : 999,
+        popular: Boolean(p.popular),
+        is_active: p.is_active !== undefined ? Boolean(p.is_active) : true
+      }));
+      setLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, formatted);
+      return formatted;
     }
 
-    // Jika belum ada di Firestore atau local, gunakan initialProducts
+    // 2. Fallback: Local Cache
+    let products = getLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, null);
     if (!products || products.length === 0) {
       products = initialProducts.map(p => ({
         ...p,
         stock: p.stock !== undefined ? Number(p.stock) : 999
       }));
       setLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, products);
-      // Inisialisasi awal ke Firestore secara background
-      this.seedInitialProducts(products).catch(() => {});
     }
 
     return products;
@@ -163,19 +172,13 @@ export const storeService = {
   async seedInitialProducts(products) {
     try {
       for (const prod of products) {
-        const docRef = getAppDoc("products", prod.id);
-        await setDoc(docRef, { ...prod, stock: prod.stock || 999, updatedAt: serverTimestamp() }, { merge: true });
+        await fetchD1('/products', { method: 'POST', body: JSON.stringify(prod) });
       }
-    } catch (e) {
-      console.warn("Could not seed initial products to firestore:", e.message);
-    }
+    } catch (e) {}
   },
 
   async saveProduct(product) {
-    const isNew = !product.id;
     const productId = product.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    
-    // Auto-detect game image jika ada kata roblox, minecraft, free fire, mobile legends
     const autoImg = getGameAutoImage(product.name, product.game_title);
     const resolvedImage = product.image_url || autoImg || "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800";
 
@@ -189,7 +192,13 @@ export const storeService = {
       updatedAt: new Date().toISOString()
     };
 
-    // Update local cache first
+    // 1. Simpan ke Cloudflare D1 Database Edge
+    await fetchD1('/products', {
+      method: 'POST',
+      body: JSON.stringify(productData)
+    });
+
+    // 2. Simpan ke local cache
     let localProducts = getLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, [...initialProducts]);
     const existingIndex = localProducts.findIndex(p => p.id === productId);
     if (existingIndex >= 0) {
@@ -199,52 +208,33 @@ export const storeService = {
     }
     setLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, localProducts);
 
-    // Save to Firestore
-    try {
-      const docRef = getAppDoc("products", productId);
-      await setDoc(docRef, {
-        ...productData,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    } catch (err) {
-      console.warn("Firestore saveProduct error (persisted locally):", err.message);
-    }
-
     return productData;
   },
 
   async deleteProduct(productId) {
-    // Update local cache
+    // 1. Hapus di Cloudflare D1 Database
+    await fetchD1(`/products/${encodeURIComponent(productId)}`, {
+      method: 'DELETE'
+    });
+
+    // 2. Update local cache
     let localProducts = getLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, []);
     localProducts = localProducts.filter(p => p.id !== productId);
     setLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, localProducts);
-
-    // Delete from Firestore
-    try {
-      const docRef = getAppDoc("products", productId);
-      await deleteDoc(docRef);
-    } catch (err) {
-      console.warn("Firestore deleteProduct error:", err.message);
-    }
     return true;
   },
 
-  // 1.5. CATEGORIES MANAGEMENT (Bisa buat kategori sendiri & bisa dihapus)
+  // 1.5. CATEGORIES MANAGEMENT WITH CLOUDFLARE D1
   async getCategories() {
-    let categories = getLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, null);
-
-    try {
-      const colRef = getAppCollection("categories");
-      const snapshot = await getDocs(colRef);
-      if (!snapshot.empty) {
-        categories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
-        return categories;
-      }
-    } catch (err) {
-      console.warn("Firestore getCategories fallback to local:", err.message);
+    // 1. Coba ambil dari Cloudflare D1
+    const d1Categories = await fetchD1('/categories');
+    if (d1Categories && Array.isArray(d1Categories) && d1Categories.length > 0) {
+      setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, d1Categories);
+      return d1Categories;
     }
 
+    // 2. Fallback: Local Cache
+    let categories = getLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, null);
     if (!categories || categories.length === 0) {
       categories = [...initialCategories];
       setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
@@ -256,11 +246,17 @@ export const storeService = {
     if (!name || !name.trim()) return null;
     const cleanName = name.trim();
     const id = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `cat-${Date.now()}`;
-    
+    const catObj = { id, name: cleanName, createdAt: new Date().toISOString() };
+
+    // 1. Simpan ke Cloudflare D1
+    await fetchD1('/categories', {
+      method: 'POST',
+      body: JSON.stringify(catObj)
+    });
+
+    // 2. Simpan ke local cache
     let categories = await this.getCategories();
     const existingIndex = categories.findIndex(c => c.id === id);
-    const catObj = { id, name: cleanName, createdAt: new Date().toISOString() };
-    
     if (existingIndex >= 0) {
       categories[existingIndex] = catObj;
     } else {
@@ -268,26 +264,19 @@ export const storeService = {
     }
     setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
 
-    try {
-      const docRef = getAppDoc("categories", id);
-      await setDoc(docRef, { ...catObj, updatedAt: serverTimestamp() }, { merge: true });
-    } catch (err) {
-      console.warn("Firestore saveCategory error:", err.message);
-    }
     return catObj;
   },
 
   async deleteCategory(categoryId) {
-    let categories = await this.getCategories();
+    // 1. Hapus dari Cloudflare D1
+    await fetchD1(`/categories/${encodeURIComponent(categoryId)}`, {
+      method: 'DELETE'
+    });
+
+    // 2. Hapus dari local cache
+    let categories = getLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, []);
     categories = categories.filter(c => c.id !== categoryId);
     setLocalData(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
-
-    try {
-      const docRef = getAppDoc("categories", categoryId);
-      await deleteDoc(docRef);
-    } catch (err) {
-      console.warn("Firestore deleteCategory error:", err.message);
-    }
     return true;
   },
 
@@ -306,8 +295,15 @@ export const storeService = {
     return accountData;
   },
 
-  // 2. STORE SETTINGS MANAGEMENT
+  // 2. STORE SETTINGS MANAGEMENT (CLOUDFLARE D1)
   async getStoreSettings() {
+    // 1. Coba ambil dari Cloudflare D1
+    const d1Settings = await fetchD1('/settings');
+    if (d1Settings && (d1Settings.id || d1Settings.store_name)) {
+      setLocalData(LOCAL_STORAGE_KEYS.SETTINGS, d1Settings);
+      return d1Settings;
+    }
+
     let settings = getLocalData(LOCAL_STORAGE_KEYS.SETTINGS, null);
 
     try {
@@ -338,6 +334,12 @@ export const storeService = {
     };
     setLocalData(LOCAL_STORAGE_KEYS.SETTINGS, updated);
 
+    // 1. Simpan ke Cloudflare D1
+    await fetchD1('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(updated)
+    });
+
     try {
       const docRef = getAppDoc("settings", "general");
       await setDoc(docRef, {
@@ -352,24 +354,16 @@ export const storeService = {
   },
 
   // 3. ORDERS MANAGEMENT
-  async getOrders(maxOrders = 50) {
-    let orders = getLocalData(LOCAL_STORAGE_KEYS.ORDERS, []);
-
-    try {
-      const colRef = getAppCollection("orders");
-      const q = query(colRef, orderBy("createdAt", "desc"), limit(maxOrders));
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setLocalData(LOCAL_STORAGE_KEYS.ORDERS, orders);
-        return orders;
-      }
-    } catch (err) {
-      console.warn("Firestore getOrders fallback to local:", err.message);
+  async getOrders(maxOrders = 100) {
+    // 1. Coba ambil dari Cloudflare D1
+    const d1Orders = await fetchD1('/orders');
+    if (d1Orders && Array.isArray(d1Orders) && d1Orders.length > 0) {
+      setLocalData(LOCAL_STORAGE_KEYS.ORDERS, d1Orders);
+      return d1Orders;
     }
 
-    return orders;
+    // 2. Fallback: Local Cache
+    return getLocalData(LOCAL_STORAGE_KEYS.ORDERS, []);
   },
 
   // Generate Game Account Profile Link or Fast Format
@@ -394,7 +388,7 @@ export const storeService = {
   async createOrder(orderPayload) {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const randCode = Math.floor(1000 + Math.random() * 9000);
-    const invoiceId = `INV-${dateStr}-${randCode}`;
+    const invoiceId = orderPayload.id || `INV-${dateStr}-${randCode}`;
     const qty = Number(orderPayload.quantity) || 1;
 
     const gameAccLink = this.generateGameAccountLink(
@@ -409,16 +403,22 @@ export const storeService = {
       quantity: qty,
       total_items: orderPayload.total_items || `${qty}x ${orderPayload.product_name}`,
       account_link: gameAccLink,
-      status: "pending", // pending, diproses, selesai, cancelled
+      status: "pending",
       createdAt: new Date().toISOString()
     };
 
-    // Save to local cache
+    // 1. Simpan ke Cloudflare D1 Database (Otomatis potong stok di D1)
+    const d1Created = await fetchD1('/orders', {
+      method: 'POST',
+      body: JSON.stringify(newOrder)
+    });
+
+    // 2. Simpan ke local cache
     let localOrders = getLocalData(LOCAL_STORAGE_KEYS.ORDERS, []);
-    localOrders.unshift(newOrder);
+    localOrders.unshift(d1Created || newOrder);
     setLocalData(LOCAL_STORAGE_KEYS.ORDERS, localOrders);
 
-    // Otomatis kurangi stok produk jika produk_id ada
+    // Otomatis kurangi stok produk di local
     if (orderPayload.product_id) {
       try {
         let prods = getLocalData(LOCAL_STORAGE_KEYS.PRODUCTS, []);
@@ -454,61 +454,16 @@ export const storeService = {
       }
     } catch (e) {}
 
-    // Otomatis catat / perbarui Akun Pengguna & Game ke Daftar Member untuk Pemilik Store / Owner
-    if (orderPayload.buyer_email || orderPayload.buyer_whatsapp) {
-      try {
-        const allUsers = getLocalData(LOCAL_STORAGE_KEYS.ALL_USER_PROFILES, []);
-        const uEmail = (orderPayload.buyer_email || '').trim().toLowerCase();
-        const uPhone = (orderPayload.buyer_whatsapp || '').trim();
-        const existingIdx = allUsers.findIndex(u => 
-          (uEmail && u.email && u.email.toLowerCase() === uEmail) ||
-          (uPhone && u.whatsapp && u.whatsapp === uPhone)
-        );
-
-        const userRecord = existingIdx >= 0 ? allUsers[existingIdx] : {
-          email: uEmail,
-          whatsapp: uPhone,
-          isGuest: !uEmail,
-          gameAccounts: {},
-          verifiedAccounts: {},
-          ordersCount: 0,
-          totalSpent: 0,
-          createdAt: new Date().toISOString()
-        };
-
-        userRecord.lastOrderProduct = orderPayload.product_name;
-        userRecord.lastGameAccount = orderPayload.game_username;
-        userRecord.ordersCount = (userRecord.ordersCount || 0) + 1;
-        userRecord.totalSpent = (userRecord.totalSpent || 0) + (Number(orderPayload.price) || 0);
-        userRecord.updatedAt = new Date().toISOString();
-
-        if (existingIdx >= 0) {
-          allUsers[existingIdx] = userRecord;
-        } else {
-          allUsers.unshift(userRecord);
-        }
-        setLocalData(LOCAL_STORAGE_KEYS.ALL_USER_PROFILES, allUsers);
-      } catch (err) {
-        console.warn("Auto-register order user error:", err);
-      }
-    }
-
-    // Save to Firestore
-    try {
-      const docRef = getAppDoc("orders", invoiceId);
-      await setDoc(docRef, {
-        ...newOrder,
-        createdAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.warn("Firestore createOrder error (saved locally):", err.message);
-    }
-
-    return newOrder;
+    return d1Created || newOrder;
   },
 
   // Pengiriman Otomatis (Auto Delivery) ke Akun Game Pembeli Setelah Bayar
   async autoDeliverOrder(orderId) {
+    // 1. Eksekusi pengiriman otomatis di Cloudflare D1
+    await fetchD1(`/orders/${encodeURIComponent(orderId)}/auto-deliver`, {
+      method: 'POST'
+    });
+
     let localOrders = getLocalData(LOCAL_STORAGE_KEYS.ORDERS, []);
     const idx = localOrders.findIndex(o => o.id === orderId);
     if (idx >= 0) {
@@ -530,22 +485,19 @@ export const storeService = {
         });
       } catch (e) {}
 
-      try {
-        const docRef = getAppDoc("orders", orderId);
-        await updateDoc(docRef, {
-          status: 'selesai',
-          auto_delivered: true,
-          delivered_at: serverTimestamp()
-        });
-      } catch (e) {
-        console.warn("Firestore autoDeliverOrder update error:", e);
-      }
       return ord;
     }
-    return null;
+    return { id: orderId, status: 'selesai', auto_delivered: true };
   },
 
   async updateOrderStatus(orderId, newStatus) {
+    // 1. Update ke Cloudflare D1
+    await fetchD1(`/orders/${encodeURIComponent(orderId)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus })
+    });
+
+    // 2. Update local cache
     let localOrders = getLocalData(LOCAL_STORAGE_KEYS.ORDERS, []);
     const idx = localOrders.findIndex(o => o.id === orderId);
     if (idx >= 0) {
@@ -553,31 +505,19 @@ export const storeService = {
       localOrders[idx].updatedAt = new Date().toISOString();
       setLocalData(LOCAL_STORAGE_KEYS.ORDERS, localOrders);
     }
-
-    try {
-      const docRef = getAppDoc("orders", orderId);
-      await updateDoc(docRef, {
-        status: newStatus,
-        updatedAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.warn("Firestore updateOrderStatus error:", err.message);
-    }
-
     return true;
   },
 
   async deleteOrder(orderId) {
+    // 1. Hapus dari Cloudflare D1
+    await fetchD1(`/orders/${encodeURIComponent(orderId)}`, {
+      method: 'DELETE'
+    });
+
+    // 2. Hapus dari local cache
     let localOrders = getLocalData(LOCAL_STORAGE_KEYS.ORDERS, []);
     localOrders = localOrders.filter(o => o.id !== orderId);
     setLocalData(LOCAL_STORAGE_KEYS.ORDERS, localOrders);
-
-    try {
-      const docRef = getAppDoc("orders", orderId);
-      await deleteDoc(docRef);
-    } catch (err) {
-      console.warn("Firestore deleteOrder error:", err.message);
-    }
     return true;
   },
 
@@ -732,8 +672,17 @@ export const storeService = {
     return true;
   },
 
-  // 6. ORDER CHAT & APPLICATION DELIVERY (TEMPAT CHAT SETELAH BAYAR)
+  // 6. ORDER CHAT & APPLICATION DELIVERY (TEMPAT CHAT SETELAH BAYAR - D1)
   async getOrderMessages(orderId) {
+    // 1. Coba ambil dari Cloudflare D1
+    const d1Chats = await fetchD1(`/chats/${encodeURIComponent(orderId)}`);
+    if (d1Chats && Array.isArray(d1Chats) && d1Chats.length > 0) {
+      const allChats = getLocalData(LOCAL_STORAGE_KEYS.CHATS, {});
+      allChats[orderId] = d1Chats;
+      setLocalData(LOCAL_STORAGE_KEYS.CHATS, allChats);
+      return d1Chats;
+    }
+
     const allChats = getLocalData(LOCAL_STORAGE_KEYS.CHATS, {});
     let messages = allChats[orderId] || [];
 
@@ -760,6 +709,12 @@ export const storeService = {
       id: msgId,
       createdAt: new Date().toISOString()
     };
+
+    // 1. Simpan ke Cloudflare D1
+    await fetchD1(`/chats/${encodeURIComponent(orderId)}`, {
+      method: 'POST',
+      body: JSON.stringify(newMsg)
+    });
 
     const allChats = getLocalData(LOCAL_STORAGE_KEYS.CHATS, {});
     if (!allChats[orderId]) allChats[orderId] = [];
@@ -794,7 +749,7 @@ export const storeService = {
     return deliveryMessage;
   },
 
-  // 6. USER PROFILE & WORLDWIDE GAME ACCOUNTS (Tamu & Akun Email)
+  // 6. USER PROFILE & WORLDWIDE GAME ACCOUNTS (Tamu & Akun Email - D1)
   async getUserProfile() {
     let profile = getLocalData(LOCAL_STORAGE_KEYS.USER_PROFILE, null);
     if (!profile) {
@@ -822,6 +777,12 @@ export const storeService = {
       updatedAt: new Date().toISOString()
     };
     setLocalData(LOCAL_STORAGE_KEYS.USER_PROFILE, updated);
+
+    // 1. Simpan ke Cloudflare D1
+    await fetchD1('/users/profiles', {
+      method: 'POST',
+      body: JSON.stringify(updated)
+    });
 
     // Simpan juga ke Daftar Seluruh Pengguna (ALL_USER_PROFILES) agar bisa dilihat oleh Pemilik Store & Owner
     try {
@@ -860,8 +821,21 @@ export const storeService = {
     return updated;
   },
 
-  // Ambil semua akun pengguna dan akun game (Untuk dilihat Pemilik Store & Owner)
+  // Ambil semua akun pengguna dan akun game (Untuk dilihat Pemilik Store & Owner - D1)
   async getAllUserProfiles() {
+    // 1. Coba ambil dari Cloudflare D1
+    const d1Profiles = await fetchD1('/users/profiles');
+    if (d1Profiles && Array.isArray(d1Profiles) && d1Profiles.length > 0) {
+      const parsed = d1Profiles.map(p => ({
+        ...p,
+        isGuest: Boolean(p.is_guest),
+        gameAccounts: p.game_accounts_json ? (typeof p.game_accounts_json === 'string' ? JSON.parse(p.game_accounts_json) : p.game_accounts_json) : {},
+        verifiedAccounts: p.verified_accounts_json ? (typeof p.verified_accounts_json === 'string' ? JSON.parse(p.verified_accounts_json) : p.verified_accounts_json) : {}
+      }));
+      setLocalData(LOCAL_STORAGE_KEYS.ALL_USER_PROFILES, parsed);
+      return parsed;
+    }
+
     let list = getLocalData(LOCAL_STORAGE_KEYS.ALL_USER_PROFILES, []);
 
     try {

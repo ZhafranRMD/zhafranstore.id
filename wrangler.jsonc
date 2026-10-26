@@ -1,12 +1,21 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "zhafranstore",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-19",
   "observability": {
     "enabled": true
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "zhafranstore-db",
+      "database_id": "6094c89a-0e9d-4755-ab07-9d6d58b7472b"
+    }
+  ],
   "assets": {
-    "directory": "./dist",
+    "directory": "./dist/client",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   }
 }
