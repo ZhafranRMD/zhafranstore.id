@@ -43,9 +43,23 @@ export default {
       }
     }
 
-    // Fallback: Sajikan Single Page Application (dist)
+    // Fallback: Sajikan Single Page Application (dist) dengan Cache Versioning Control
     if (env.ASSETS) {
-      return await env.ASSETS.fetch(request);
+      const res = await env.ASSETS.fetch(request);
+      const newHeaders = new Headers(res.headers);
+      // Selalu pastikan HTML dan Service Worker tidak tersimpan permanen di cache browser
+      if (url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname === '/sw.js') {
+        newHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        newHeaders.set('Pragma', 'no-cache');
+        newHeaders.set('Expires', '0');
+      } else if (url.pathname.startsWith('/assets/')) {
+        newHeaders.set('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: newHeaders
+      });
     }
 
     return new Response("Not Found", { status: 404 });
@@ -67,9 +81,73 @@ async function handleApi(request, env, url) {
     return jsonResponse({
       status: "online",
       database: "Cloudflare D1 (SQLite Edge)",
+      r2_storage: env.R2 ? "online (zhafranstore-storage)" : "not_configured",
       region: "APAC (Singapore)",
       alive: check?.alive === 1
     });
+  }
+
+  // 1.1 CLOUDFLARE R2 OBJECT STORAGE ENDPOINTS
+  // GET /api/media/:key (Sajikan Media / Gambar dari R2)
+  if (path.startsWith("/media/") && method === "GET") {
+    const key = decodeURIComponent(path.replace(/^\/media\//, ""));
+    if (!env.R2) return errorResponse("R2 Storage binding tidak aktif", 500);
+    const object = await env.R2.get(key);
+    if (!object) return errorResponse(`Berkas media '${key}' tidak ditemukan di R2`, 404);
+
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set("etag", object.httpEtag);
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+    headers.set("Access-Control-Allow-Origin", "*");
+    return new Response(object.body, { headers });
+  }
+
+  // POST /api/upload (Unggah Bukti Bayar / Gambar Produk ke R2)
+  if (path === "/upload" && method === "POST") {
+    if (!env.R2) return errorResponse("R2 Storage binding tidak aktif", 500);
+    const contentType = request.headers.get("content-type") || "";
+
+    let fileBuffer;
+    let fileName = `file-${Date.now()}`;
+    let mimeType = "application/octet-stream";
+    let folder = "uploads";
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      const file = formData.get("file");
+      folder = formData.get("folder") || "uploads";
+      if (!file) return errorResponse("Tidak ada berkas yang diunggah", 400);
+
+      fileName = file.name ? file.name.replace(/[^a-zA-Z0-9._-]/g, "_") : `file-${Date.now()}`;
+      mimeType = file.type || "application/octet-stream";
+      fileBuffer = await file.arrayBuffer();
+    } else {
+      fileBuffer = await request.arrayBuffer();
+      mimeType = contentType;
+    }
+
+    const key = `${folder}/${Date.now()}-${fileName}`;
+    await env.R2.put(key, fileBuffer, {
+      httpMetadata: { contentType: mimeType }
+    });
+
+    const publicUrl = `/api/media/${key}`;
+    return jsonResponse({
+      success: true,
+      key,
+      url: publicUrl,
+      size: fileBuffer.byteLength,
+      contentType: mimeType
+    }, 201);
+  }
+
+  // DELETE /api/media/:key (Hapus Berkas dari R2)
+  if (path.startsWith("/media/") && method === "DELETE") {
+    const key = decodeURIComponent(path.replace(/^\/media\//, ""));
+    if (!env.R2) return errorResponse("R2 Storage binding tidak aktif", 500);
+    await env.R2.delete(key);
+    return jsonResponse({ success: true, message: `Berkas ${key} berhasil dihapus dari R2` });
   }
 
   // 2. PRODUK

@@ -386,9 +386,16 @@ export default function AdminModal({
     setIsCreatingProduct(true);
   };
 
-  const handleProductImageUpload = (e) => {
+  const handleProductImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
+      try {
+        const r2Url = await storeService.uploadToR2(file, 'products');
+        if (r2Url) {
+          setProductForm(prev => ({ ...prev, image_url: r2Url }));
+          return;
+        }
+      } catch (err) {}
       const reader = new FileReader();
       reader.onloadend = () => {
         setProductForm(prev => ({ ...prev, image_url: reader.result }));
@@ -426,10 +433,18 @@ export default function AdminModal({
     }
   };
 
-  // QRIS & SETTINGS
-  const handleQrisFileUpload = (e) => {
+  // QRIS & SETTINGS (CLOUDFLARE R2)
+  const handleQrisFileUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
+      try {
+        const r2Url = await storeService.uploadToR2(file, 'qris');
+        if (r2Url) {
+          setQrisPreview(r2Url);
+          setSettingsForm(prev => ({ ...prev, qris_image_url: r2Url }));
+          return;
+        }
+      } catch (err) {}
       const reader = new FileReader();
       reader.onloadend = () => {
         setQrisPreview(reader.result);

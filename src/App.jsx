@@ -287,12 +287,20 @@ export default function App() {
                   Buka Pusat Bantuan Admin
                 </button>
               </li>
-              <li className="pt-1">
+              <li className="pt-1 flex items-center gap-3">
                 <button 
                   onClick={() => setIsAdminOpen(true)} 
-                  className="text-violet-400 hover:underline inline-flex items-center gap-1"
+                  className="text-violet-400 hover:underline inline-flex items-center gap-1 text-xs"
                 >
                   Panel Pemilik Toko
+                </button>
+                <span className="text-slate-600">•</span>
+                <button 
+                  onClick={() => storeService.purgeAppCache()} 
+                  title="Klik untuk menghapus cache browser lama dan memuat versi terbaru"
+                  className="text-cyan-400 hover:text-cyan-300 hover:underline inline-flex items-center gap-1 text-xs font-mono"
+                >
+                  🔄 Reset Cache (v2.3.0)
                 </button>
               </li>
             </ul>

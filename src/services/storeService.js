@@ -750,7 +750,7 @@ export const storeService = {
   },
 
   // 6. USER PROFILE & WORLDWIDE GAME ACCOUNTS (Tamu & Akun Email - D1)
-  async getUserProfile() {
+  getUserProfile() {
     let profile = getLocalData(LOCAL_STORAGE_KEYS.USER_PROFILE, null);
     if (!profile) {
       profile = {
@@ -916,5 +916,60 @@ export const storeService = {
 
   clearLatestNotification() {
     setLocalData(LOCAL_STORAGE_KEYS.LATEST_NOTIFICATION, null);
+  },
+
+  // 7. CLOUDFLARE R2 STORAGE INTEGRATION
+  async uploadToR2(file, folder = 'uploads') {
+    if (!file) return null;
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', folder);
+
+      const API_BASE = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : 'https://store.zhafranstudio.my.id';
+      const res = await fetch(`${API_BASE}/api/upload`, {
+        method: 'POST',
+        headers: {
+          'x-admin-key': 'zhafranstoreid'
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        throw new Error(`Upload gagal (${res.status})`);
+      }
+      const data = await res.json();
+      return data.url; // /api/media/...
+    } catch (err) {
+      console.warn("R2 Upload fallback to data URL:", err.message);
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+  },
+
+  // 8. VERSION CACHE PURGE & FORCE REFRESH
+  async purgeAppCache() {
+    try {
+      if (typeof window !== 'undefined') {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const reg of registrations) {
+            await reg.unregister();
+          }
+        }
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload();
+      }
+    } catch (e) {
+      if (typeof window !== 'undefined') window.location.reload();
+    }
   }
 };

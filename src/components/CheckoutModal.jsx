@@ -218,6 +218,17 @@ export default function CheckoutModal({
 
     setIsSubmitting(true);
     try {
+      // 1. Upload bukti pembayaran ke Cloudflare R2 jika tersedia
+      let proofUrl = proofPreview || null;
+      if (proofImage) {
+        try {
+          const uploaded = await storeService.uploadToR2(proofImage, 'bukti-transfer');
+          if (uploaded) proofUrl = uploaded;
+        } catch (e) {
+          console.warn("Gagal upload R2, gunakan fallback preview", e);
+        }
+      }
+
       const orderPayload = {
         product_id: product.id,
         product_name: product.name,
@@ -238,7 +249,7 @@ export default function CheckoutModal({
         notes: buyerNotes,
         order_mode: openWhatsApp ? 'whatsapp_chat' : 'tanpa_chat_web',
         payment_method: 'qris',
-        payment_proof_url: proofPreview || null,
+        payment_proof_url: proofUrl,
         created_at: new Date().toISOString()
       };
 
