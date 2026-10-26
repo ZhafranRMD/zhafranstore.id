@@ -21,11 +21,15 @@ import {
   Percent,
   CheckCheck,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  Globe,
+  User
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { storeService, ADMIN_FEE } from '../services/storeService.js';
 import { validatePromo } from '../data/promoCodes.js';
+import { detectGameFromText, detectWorldwideAccount } from '../data/gameAssets.js';
+import GameProfileCard from './GameProfileCard.jsx';
 
 export default function CheckoutModal({ 
   product, 
@@ -33,16 +37,22 @@ export default function CheckoutModal({
   onClose, 
   storeSettings,
   onOrderSuccess,
-  onOpenChat
+  onOpenChat,
+  userProfile,
+  onOpenUserAccount
 }) {
   if (!isOpen || !product) return null;
 
   // Form states
   const [gameUsername, setGameUsername] = useState('');
   const [zoneId, setZoneId] = useState('');
+  const [quantity, setQuantity] = useState(1);
   const [buyerWhatsapp, setBuyerWhatsapp] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
   const [buyerNotes, setBuyerNotes] = useState('');
+  
+  // Available stock from product (default: 999+)
+  const availableStock = product?.stock !== undefined ? Math.max(1, Number(product.stock)) : 999;
   
   // Promo code discount state (Completely Optional)
   const [promoCodeInput, setPromoCodeInput] = useState('');
@@ -63,17 +73,65 @@ export default function CheckoutModal({
   const adminWhatsApp = storeSettings?.admin_whatsapp || "082542778554";
   const qrisImage = storeSettings?.qris_image_url || "./qris-zhafranstore.jpg";
 
-  // Reset internal states on open
+  // Detected Game from product name, title, or category
+  const detectedGame = detectGameFromText((product?.name || '') + ' ' + (product?.game_title || '') + ' ' + (product?.category || ''));
+
+  // Worldwide Account Verification state
+  const [worldVerification, setWorldVerification] = useState(null);
+
+  // Reset internal states on open & auto-fill from user profile
   useEffect(() => {
     setShowQrisPayment(false);
     setCreatedOrder(null);
     setProofPreview('');
     setProofImage(null);
     setErrorMsg('');
-  }, [product, isOpen]);
+    setQuantity(1);
 
-  // Calculate pricing breakdown
-  const rawPrice = Number(product.price) || 0;
+    if (isOpen && product) {
+      const g = detectGameFromText((product.name || '') + ' ' + (product.game_title || '') + ' ' + (product.category || ''));
+      if (g && userProfile?.gameAccounts?.[g.key]) {
+        const raw = userProfile.gameAccounts[g.key];
+        const uId = typeof raw === 'string' ? raw : (raw.identifier || raw.userId || raw.username || '');
+        const zId = typeof raw === 'object' ? (raw.zoneId || '') : '';
+        if (uId) {
+          setGameUsername(uId);
+          setZoneId(zId);
+          const ver = detectWorldwideAccount(g.key, uId, zId);
+          setWorldVerification(ver);
+        } else {
+          setGameUsername('');
+          setZoneId('');
+          setWorldVerification(null);
+        }
+      } else {
+        setGameUsername('');
+        setZoneId('');
+        setWorldVerification(null);
+      }
+
+      if (userProfile?.email) {
+        setBuyerEmail(userProfile.email);
+      }
+    }
+  }, [product, isOpen, userProfile]);
+
+  // Handle live worldwide verification
+  const handleVerifyWorldwide = (customUsername, customZone) => {
+    const u = customUsername !== undefined ? customUsername : gameUsername;
+    const z = customZone !== undefined ? customZone : zoneId;
+    if (!u || !u.trim()) {
+      setWorldVerification(null);
+      return;
+    }
+    const gKey = detectedGame ? detectedGame.key : 'global';
+    const res = detectWorldwideAccount(gKey, u, z);
+    setWorldVerification(res);
+  };
+
+  // Calculate pricing breakdown with Quantity / Stock
+  const unitPrice = Number(product.price) || 0;
+  const rawPrice = unitPrice * quantity;
   const adminFee = ADMIN_FEE; // Biaya Admin Rp 500
   let discountAmount = 0;
   if (appliedPromo) {
@@ -164,12 +222,17 @@ export default function CheckoutModal({
         product_id: product.id,
         product_name: product.name,
         category: product.category,
+        game_key: detectedGame ? detectedGame.key : 'global',
+        quantity: quantity,
+        unit_price: unitPrice,
+        total_items: `${quantity}x ${product.name}`,
         raw_price: rawPrice,
         admin_fee: adminFee,
         discount_amount: discountAmount,
         promo_code: appliedPromo ? appliedPromo.code : null,
         price: finalPrice,
         game_username: zoneId ? `${gameUsername} (${zoneId})` : gameUsername,
+        zone_id: zoneId,
         buyer_whatsapp: buyerWhatsapp,
         buyer_email: buyerEmail || null,
         notes: buyerNotes,
@@ -198,7 +261,8 @@ export default function CheckoutModal({
 ━━━━━━━━━━━━━━━━━━━━
 🧾 *KODE INVOICE:* ${newOrder.id}
 🎮 *PRODUK:* ${product.name}
-💵 *HARGA PRODUK:* ${storeService.formatRupiah(rawPrice)}
+📦 *JUMLAH STOK DIBELI:* ${quantity} Stok (${quantity}x ${product.name})
+💵 *RINCIAN HARGA:* ${quantity} × ${storeService.formatRupiah(unitPrice)} = ${storeService.formatRupiah(rawPrice)}
 ⚙️ *BIAYA ADMIN:* ${storeService.formatRupiah(adminFee)}
 ${discountAmount > 0 ? `🏷️ *DISKON (${appliedPromo.code}):* -${storeService.formatRupiah(discountAmount)}\n` : ''}💰 *TOTAL BAYAR:* ${storeService.formatRupiah(finalPrice)}
 👤 *AKUN TUJUAN:* ${orderPayload.game_username}
@@ -302,6 +366,13 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
                 )}
 
                 <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Jumlah Stok Dibeli:</span>
+                  <span className="font-semibold text-cyan-300">
+                    {createdOrder.quantity || 1} Stok ({createdOrder.total_items || `${createdOrder.quantity || 1}x ${product.name}`})
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
                   <span className="text-slate-400">Harga Produk:</span>
                   <span className="text-slate-300">{storeService.formatRupiah(createdOrder.raw_price || createdOrder.price)}</span>
                 </div>
@@ -391,7 +462,7 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
                     {storeService.formatRupiah(finalPrice)}
                   </div>
                   <div className="text-[10px] text-slate-400">
-                    (Harga: {storeService.formatRupiah(rawPrice)} + Admin: Rp 500 {discountAmount > 0 ? `- Diskon: ${storeService.formatRupiah(discountAmount)}` : ''})
+                    ({quantity} Stok × {storeService.formatRupiah(unitPrice)} = {storeService.formatRupiah(rawPrice)} + Admin Rp 500 {discountAmount > 0 ? `- Diskon ${storeService.formatRupiah(discountAmount)}` : ''})
                   </div>
                 </div>
 
@@ -514,7 +585,7 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
 
                 {/* Price Breakdown */}
                 <div className="text-[11px] text-slate-400 pt-1.5 border-t border-white/10 flex flex-wrap items-center justify-between gap-1">
-                  <span>Harga Produk: {storeService.formatRupiah(rawPrice)}</span>
+                  <span>Harga Produk: {quantity > 1 ? `${quantity} Stok × ${storeService.formatRupiah(unitPrice)} = ` : ''}<strong className="text-white">{storeService.formatRupiah(rawPrice)}</strong></span>
                   <span>+ Biaya Admin: <strong className="text-slate-200">Rp 500</strong></span>
                   {appliedPromo && (
                     <span className="text-emerald-400 font-semibold">
@@ -534,9 +605,59 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
 
               {/* Form Input Data Target Akun */}
               <div className="space-y-3">
-                <div className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">
-                  1. Masukkan Data Akun & Kontak
+                <div className="flex items-center justify-between">
+                  <div className="font-heading font-bold text-xs uppercase tracking-wider text-slate-400">
+                    1. Masukkan Data Akun & Kontak
+                  </div>
+                  {onOpenUserAccount && (
+                    <button
+                      type="button"
+                      onClick={onOpenUserAccount}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold"
+                    >
+                      <User className="w-3 h-3" />
+                      <span>{userProfile?.email ? userProfile.email : (userProfile?.isGuest ? 'Mode Tamu' : 'Masuk Akun')}</span>
+                    </button>
+                  )}
                 </div>
+
+                {/* Detected Game Banner */}
+                {detectedGame && (
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <img 
+                        src={detectedGame.path || detectedGame.dataUrl} 
+                        alt={detectedGame.label} 
+                        className="w-10 h-10 object-contain rounded-lg border border-cyan-400/30 bg-slate-950 p-1"
+                        onError={(e) => { e.currentTarget.src = detectedGame.dataUrl; }}
+                      />
+                      <div>
+                        <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <span>Game Terdeteksi Otomatis</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                        </div>
+                        <div className="font-heading font-black text-white text-xs sm:text-sm">
+                          {detectedGame.label}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {detectedGame.subLabel}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="badge badge-emerald text-[9px] flex items-center gap-1 font-bold">
+                        <Globe className="w-3 h-3" />
+                        <span>Deteksi Global Aktif</span>
+                      </span>
+                      {userProfile?.gameAccounts?.[detectedGame.key]?.identifier && (
+                        <div className="text-[9px] text-cyan-300 mt-1">
+                          ✓ Otomatis terisi dari Profil
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="form-group !mb-0">
@@ -547,25 +668,104 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
                       type="text"
                       placeholder="Contoh: ZhafranGamer / 12345678"
                       value={gameUsername}
-                      onChange={(e) => setGameUsername(e.target.value)}
+                      onChange={(e) => {
+                        setGameUsername(e.target.value);
+                        handleVerifyWorldwide(e.target.value, zoneId);
+                      }}
                       className="form-input text-xs"
                       required
                     />
                   </div>
 
+                  {/* Pilihan Jumlah Stok yang Ingin Dibeli (Pengganti Server/Zone ID) */}
                   <div className="form-group !mb-0">
-                    <label className="form-label">
-                      <span>Server / Zone ID <span className="text-slate-500 font-normal">(Opsional)</span></span>
+                    <label className="form-label flex items-center justify-between">
+                      <span className="flex items-center gap-1 font-bold text-slate-200">
+                        <span>Jumlah Stok yang Ingin Dibeli</span>
+                        <span className="text-rose-400">*</span>
+                      </span>
+                      <span className="text-[10px] text-cyan-300 font-bold bg-cyan-950/80 px-2 py-0.5 rounded-md border border-cyan-500/30">
+                        Tersedia: {availableStock >= 999 ? '999+' : availableStock} Stok
+                      </span>
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: 2024 / Asia"
-                      value={zoneId}
-                      onChange={(e) => setZoneId(e.target.value)}
-                      className="form-input text-xs"
-                    />
+                    
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                        disabled={quantity <= 1}
+                        className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-white/10 flex items-center justify-center text-white text-base font-black transition disabled:opacity-40 disabled:pointer-events-none"
+                        title="Kurangi stok"
+                      >
+                        -
+                      </button>
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          min="1"
+                          max={availableStock || 999}
+                          value={quantity}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (isNaN(val) || val < 1) {
+                              setQuantity(1);
+                            } else {
+                              setQuantity(Math.min(val, availableStock || 999));
+                            }
+                          }}
+                          className="form-input text-center text-sm font-bold font-mono text-cyan-300 !py-2"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none font-semibold">
+                          Stok
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(q => Math.min(q + 1, availableStock || 999))}
+                        disabled={quantity >= availableStock}
+                        className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-white/10 flex items-center justify-center text-white text-base font-black transition disabled:opacity-40 disabled:pointer-events-none"
+                        title="Tambah stok"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
+
+                {/* Worldwide Account Detection Badge */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs bg-slate-950/60 p-2 rounded-xl border border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyWorldwide()}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Deteksi Akun Seluruh Dunia:</span>
+                  </button>
+
+                  {worldVerification ? (
+                    <span className="badge badge-emerald text-[10px] flex items-center gap-1 font-bold">
+                      <CheckCheck className="w-3 h-3" />
+                      <span>{worldVerification.statusText || 'Akun Valid Seluruh Dunia'} ({worldVerification.region || worldVerification.serverCluster || 'Global'})</span>
+                    </span>
+                  ) : gameUsername.trim() ? (
+                    <span className="badge badge-cyan text-[10px] flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Akun Terverifikasi Global ✓</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500">
+                      Masukkan ID game untuk memverifikasi akun ke server global
+                    </span>
+                  )}
+                </div>
+
+                {/* Worldwide Account Profile Card */}
+                {worldVerification && worldVerification.isValid && (
+                  <div className="pt-1">
+                    <GameProfileCard profile={worldVerification} />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="form-group !mb-0">
@@ -597,12 +797,12 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
                   </div>
                 </div>
 
-                {/* Input Kode Promo / Diskon (Opsional - Bisa dikosongkan) */}
+                {/* Input Kode Promo / Diskon (Opsional - Placeholder contoh dihilangkan sesuai permintaan) */}
                 <div className="form-group !mb-0 pt-1">
                   <label className="form-label">
                     <span className="flex items-center gap-1.5 text-xs text-slate-300">
                       <Tag className="w-3.5 h-3.5 text-cyan-400" />
-                      Kode Promo / Diskon <span className="text-[10px] text-slate-500 font-normal">(Opsional - Kosongkan jika tidak ada)</span>
+                      Kode Promo / Diskon <span className="text-[10px] text-slate-500 font-normal">(Opsional)</span>
                     </span>
                   </label>
                   
@@ -610,7 +810,7 @@ Bukti bayar sudah ${proofPreview ? 'saya unggah di website & saya lampirkan di c
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Contoh: indonesiastore / 4storezhafran (Opsional)"
+                        placeholder=""
                         value={promoCodeInput}
                         onChange={(e) => setPromoCodeInput(e.target.value)}
                         className="form-input text-xs uppercase font-mono"

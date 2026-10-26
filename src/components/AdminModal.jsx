@@ -30,10 +30,16 @@ import {
   Layers,
   Copy,
   User,
-  Crown
+  Crown,
+  Users,
+  Globe2,
+  Mail,
+  Sparkles
 } from 'lucide-react';
 import { storeService } from '../services/storeService.js';
 import { validAdminCodes, promoCodes, getAuthRole } from '../data/promoCodes.js';
+import { detectGameFromText, GAME_ASSETS, detectWorldwideAccount } from '../data/gameAssets.js';
+import GameProfileCard from './GameProfileCard.jsx';
 
 export default function AdminModal({ 
   isOpen, 
@@ -79,6 +85,16 @@ export default function AdminModal({
   const [isOwnerSubmitting, setIsOwnerSubmitting] = useState(false);
   const [copiedPromo, setCopiedPromo] = useState('');
 
+  // Real-time Order Notification for Admin / Owner
+  const [newOrderAlert, setNewOrderAlert] = useState(() => storeService.getLatestNotification());
+  const [copiedLinkOrder, setCopiedLinkOrder] = useState('');
+  const [deliveringOrderId, setDeliveringOrderId] = useState(null);
+
+  // Registered Customer Profiles & Game Accounts State (Untuk Pemilik Store & Owner)
+  const [userProfiles, setUserProfiles] = useState([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [viewingUserProfile, setViewingUserProfile] = useState(null);
+
   // Events & Challenges State
   const [events, setEvents] = useState([]);
   const [challenges, setChallenges] = useState([]);
@@ -106,7 +122,7 @@ export default function AdminModal({
     is_free_product: false
   });
 
-  // Product Editing / Creation State (Marketplace Links Removed)
+  // Product Editing / Creation State with Stock (Maks 999+)
   const [editingProduct, setEditingProduct] = useState(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [productForm, setProductForm] = useState({
@@ -117,7 +133,8 @@ export default function AdminModal({
     image_url: '',
     description: '',
     is_active: true,
-    popular: false
+    popular: false,
+    stock: 999
   });
 
   // Settings State
@@ -136,12 +153,39 @@ export default function AdminModal({
       loadOrders();
       loadEvents();
       loadChallenges();
+      loadUserProfiles();
     }
   }, [isAuthenticated]);
+
+  // Live real-time new order listener
+  useEffect(() => {
+    const handleNewOrder = (e) => {
+      if (e.detail) {
+        setNewOrderAlert(e.detail);
+        loadOrders();
+        if (showToast) showToast(`🔔 Pesanan Baru: ${e.detail.product_name} (${e.detail.game_username})`);
+      }
+    };
+    window.addEventListener('zhafran_new_order_notify', handleNewOrder);
+    return () => window.removeEventListener('zhafran_new_order_notify', handleNewOrder);
+  }, []);
 
   const loadOrders = async () => {
     const list = await storeService.getOrders(100);
     setOrders(list);
+  };
+
+  const loadUserProfiles = async () => {
+    const list = await storeService.getAllUserProfiles();
+    setUserProfiles(list);
+  };
+
+  const handleDeleteUserProfile = async (emailOrKey) => {
+    if (window.confirm("Hapus data akun pengguna ini dari daftar member?")) {
+      await storeService.deleteUserProfile(emailOrKey);
+      await loadUserProfiles();
+      if (showToast) showToast("Data pengguna berhasil dihapus.");
+    }
   };
 
   const loadEvents = async () => {
@@ -152,6 +196,37 @@ export default function AdminModal({
   const loadChallenges = async () => {
     const list = await storeService.getChallenges(100);
     setChallenges(list);
+  };
+
+  // Salin Akun / Link Game untuk dimasukkan ke game
+  const handleCopyAccountLink = (order) => {
+    if (!order) return;
+    const directLink = storeService.generateGameAccountLink(order.game_key, order.game_username, order.zone_id);
+    navigator.clipboard.writeText(directLink);
+    setCopiedLinkOrder(order.id);
+    setTimeout(() => setCopiedLinkOrder(''), 3000);
+    if (showToast) showToast(`Link / Akun Game (${order.game_username}) berhasil disalin ke clipboard!`);
+  };
+
+  // Kirim Otomatis apa yang di-top-up ke akun pembeli
+  const handleAutoDeliver = async (orderId) => {
+    if (!orderId) return;
+    setDeliveringOrderId(orderId);
+    try {
+      const delivered = await storeService.autoDeliverOrder(orderId);
+      if (delivered) {
+        await loadOrders();
+        if (newOrderAlert && newOrderAlert.id === orderId) {
+          setNewOrderAlert(null);
+        }
+        if (showToast) showToast(`⚡ Pesanan ${orderId} berhasil dikirim otomatis ke akun game pembeli!`);
+      }
+    } catch (err) {
+      console.error(err);
+      if (showToast) showToast(`Gagal mengirim otomatis: ${err.message}`);
+    } finally {
+      setDeliveringOrderId(null);
+    }
   };
 
   // Handle Login & Role Detection
@@ -168,9 +243,10 @@ export default function AdminModal({
       loadOrders();
       loadEvents();
       loadChallenges();
+      loadUserProfiles();
       setActiveTab('orders');
     } else {
-      setPinError('Kode akses tidak valid. Gunakan kode Kepemilikan atau kode Owner (ownerthebest).');
+      setPinError('Kode akses tidak valid. Gunakan kode Kepemilikan Toko yang sah.');
     }
   };
 
@@ -260,7 +336,7 @@ export default function AdminModal({
         game_username: ownerAccount.server_id ? `${ownerAccount.username} (${ownerAccount.server_id})` : ownerAccount.username,
         buyer_whatsapp: ownerAccount.whatsapp || "082542778554",
         buyer_email: ownerAccount.email || null,
-        notes: "Pesanan Pembelian oleh Owner (ownerthebest)",
+        notes: "Pesanan Pembelian oleh Akun Owner",
         order_mode: "owner_purchase",
         payment_method: "qris",
         payment_proof_url: null,
@@ -288,7 +364,8 @@ export default function AdminModal({
       image_url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
       description: '',
       is_active: true,
-      popular: false
+      popular: false,
+      stock: 999
     });
     setIsCreatingProduct(true);
   };
@@ -303,7 +380,8 @@ export default function AdminModal({
       image_url: prod.image_url || '',
       description: prod.description || '',
       is_active: prod.is_active !== undefined ? prod.is_active : true,
-      popular: prod.popular || false
+      popular: prod.popular || false,
+      stock: prod.stock !== undefined ? prod.stock : 999
     });
     setIsCreatingProduct(true);
   };
@@ -329,7 +407,8 @@ export default function AdminModal({
     const payload = {
       ...productForm,
       id: editingProduct ? editingProduct.id : undefined,
-      price: Number(productForm.price)
+      price: Number(productForm.price),
+      stock: Math.max(0, Number(productForm.stock) !== undefined ? Number(productForm.stock) : 999)
     };
 
     const saved = await storeService.saveProduct(payload);
@@ -445,7 +524,7 @@ export default function AdminModal({
                       ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                       : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
                   }`}>
-                    {userRole === 'owner_thebest' ? '👑 OWNER (ownerthebest)' : '⚡ KEPEMILIKAN'}
+                    {userRole === 'owner_thebest' ? '👑 OWNER TOKO' : '⚡ KEPEMILIKAN'}
                   </span>
                 )}
               </div>
@@ -485,7 +564,7 @@ export default function AdminModal({
             <div>
               <h4 className="font-heading font-black text-lg text-white">Verifikasi Akses Toko</h4>
               <p className="text-xs text-slate-400 mt-1">
-                Masukkan Kode Kepemilikan Toko atau Kode Owner (<code className="text-cyan-400 font-mono">ownerthebest</code>)
+                Masukkan Kode Kepemilikan Toko Resmi
               </p>
             </div>
 
@@ -525,6 +604,22 @@ export default function AdminModal({
                 <span>{userRole === 'owner_thebest' ? 'Barang Masuk (Pesanan)' : 'Pesanan Masuk'}</span>
                 <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px]">
                   {orders.length}
+                </span>
+              </button>
+
+              {/* Tab: Akun Pengguna & Game Global (Bisa dilihat oleh Pemilik Store & Owner) */}
+              <button
+                onClick={() => { setActiveTab('users'); setIsCreatingProduct(false); }}
+                className={`flex items-center gap-2 px-3.5 py-2.5 border-b-2 text-xs sm:text-sm font-heading font-bold transition whitespace-nowrap ${
+                  activeTab === 'users'
+                    ? 'border-cyan-400 text-cyan-400 bg-cyan-500/10'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-4 h-4 text-cyan-400" />
+                <span>Akun Pengguna & Game</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px]">
+                  {userProfiles.length}
                 </span>
               </button>
 
@@ -629,10 +724,63 @@ export default function AdminModal({
             {/* Tab Body */}
             <div className="modal-body flex-1 overflow-y-auto">
               
-              {/* TAB 1: PESANAN MASUK / BARANG MASUK (DENGAN TOMBOL CHECKLIST RESMI) */}
+              {/* TAB 1: PESANAN MASUK / BARANG MASUK (DENGAN TOMBOL CHECKLIST RESMI & KIRIM OTOMATIS) */}
               {activeTab === 'orders' && (
                 <div className="space-y-4">
                   
+                  {/* Live Real-time Order Alert Banner for Owner & Admin */}
+                  {newOrderAlert && (
+                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/90 via-blue-950/80 to-slate-900 border border-cyan-400/50 shadow-lg shadow-cyan-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 text-lg">
+                          🔔
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            <span>Ada yang Ingin Membeli!</span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                          </div>
+                          <div className="text-xs text-white font-heading font-black">
+                            {newOrderAlert.product_name} ({newOrderAlert.quantity || 1} Stok) — Akun: <span className="text-cyan-300 font-mono">{newOrderAlert.game_username}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            WhatsApp: {newOrderAlert.buyer_whatsapp} • Total: {storeService.formatRupiah(newOrderAlert.price)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyAccountLink(newOrderAlert)}
+                          className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1 text-cyan-300 font-bold"
+                          title="Salin Akun atau Link Game"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Salin Akun / Link</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deliveringOrderId === newOrderAlert.id}
+                          onClick={() => handleAutoDeliver(newOrderAlert.id)}
+                          className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1 font-bold shadow-md shadow-cyan-500/30"
+                          title="Kirim apa yang ia top up otomatis ke akun pembeli"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                          <span>Kirim Otomatis</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewOrderAlert(null)}
+                          className="text-slate-400 hover:text-white p-1"
+                          title="Tutup Notifikasi"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Order Filter Bar */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
@@ -690,6 +838,9 @@ export default function AdminModal({
                               {order.order_mode === 'owner_purchase' && (
                                 <span className="badge badge-purple text-[8px] font-bold">AKUN OWNER</span>
                               )}
+                              {order.auto_delivered && (
+                                <span className="badge badge-cyan text-[8px] font-bold">TERKIRIM OTOMATIS</span>
+                              )}
                               <span className="text-[10px] text-slate-500">
                                 {order.createdAt ? new Date(order.createdAt).toLocaleDateString('id-ID', {
                                   hour: '2-digit', minute: '2-digit'
@@ -705,6 +856,7 @@ export default function AdminModal({
                               <span>Akun: <strong className="text-white">{order.game_username}</strong></span>
                               <span>WA: <strong className="text-white">{order.buyer_whatsapp}</strong></span>
                               {order.buyer_email && <span>Email: <strong className="text-cyan-300">{order.buyer_email}</strong></span>}
+                              {order.quantity && <span>Jumlah: <strong className="text-cyan-300 font-bold">{order.quantity} Stok</strong></span>}
                               <span>Total: <strong className="text-emerald-400">{storeService.formatRupiah(order.price)}</strong></span>
                             </div>
                             {order.notes && (
@@ -717,6 +869,33 @@ export default function AdminModal({
                           {/* ACTION BUTTONS */}
                           <div className="flex items-center gap-2 flex-wrap self-end sm:self-center">
                             
+                            {/* TOMBOL SALIN AKUN / LINK GAME */}
+                            <button
+                              type="button"
+                              onClick={() => handleCopyAccountLink(order)}
+                              className="btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1 font-semibold text-cyan-300 hover:text-cyan-200 border-cyan-500/30"
+                              title="Salin Akun atau Link Game untuk dimasukkan ke game"
+                            >
+                              {copiedLinkOrder === order.id ? <CheckCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                              <span>{copiedLinkOrder === order.id ? 'Tersalin ✓' : 'Salin Akun'}</span>
+                            </button>
+
+                            {/* TOMBOL KIRIM OTOMATIS KE AKUN GAME */}
+                            <button
+                              type="button"
+                              disabled={deliveringOrderId === order.id || order.auto_delivered}
+                              onClick={() => handleAutoDeliver(order.id)}
+                              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold transition shadow-md ${
+                                order.auto_delivered
+                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
+                                  : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 hover:brightness-110 active:scale-95'
+                              }`}
+                              title="Kirim apa yang ia top up secara otomatis ke akun pembeli"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                              <span>{deliveringOrderId === order.id ? 'Mengirim...' : order.auto_delivered ? 'Terkirim Otomatis ✓' : 'Kirim Otomatis'}</span>
+                            </button>
+
                             {/* TOMBOL CHECKLIST (BISA DIAKSES OLEH OWNER & ADMIN) */}
                             <button
                               type="button"
@@ -823,7 +1002,7 @@ export default function AdminModal({
                           <label className="form-label">Username Akun Game (ID) *</label>
                           <input
                             type="text"
-                            placeholder="Contoh: OwnerTheBest_Pro / 12345678"
+                            placeholder="Contoh: ZhafranOwner_Pro / 12345678"
                             value={ownerAccount.username}
                             onChange={(e) => setOwnerAccount({ ...ownerAccount, username: e.target.value })}
                             className="form-input text-xs"
@@ -1080,10 +1259,13 @@ export default function AdminModal({
                                 <div className="font-heading font-bold text-white text-sm line-clamp-1">
                                   {prod.name}
                                 </div>
-                                <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                                <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5 flex-wrap">
                                   <span className="text-cyan-400 font-bold">{storeService.formatRupiah(prod.price)}</span>
                                   <span>•</span>
                                   <span className="capitalize text-slate-400">{prod.category}</span>
+                                  <span className="badge badge-cyan text-[8px] font-bold">
+                                    Stok: {prod.stock !== undefined ? (prod.stock >= 999 ? '999+' : prod.stock) : '999+'}
+                                  </span>
                                   {prod.popular && <span className="badge badge-amber text-[8px]">HOT</span>}
                                 </div>
                               </div>
@@ -1130,9 +1312,18 @@ export default function AdminModal({
                           <label className="form-label">Nama Produk *</label>
                           <input
                             type="text"
-                            placeholder="Contoh: Roblox 2x Mastery / MLBB 1000 DM"
+                            placeholder="Contoh: Roblox 2x Mastery / Minecraft Coins / Free Fire DM / MLBB 1000 DM"
                             value={productForm.name}
-                            onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const updated = { ...productForm, name: val };
+                              const detected = detectGameFromText(val + ' ' + (productForm.game_title || ''));
+                              if (detected) {
+                                updated.image_url = detected.path;
+                                if (!updated.game_title) updated.game_title = detected.label;
+                              }
+                              setProductForm(updated);
+                            }}
                             className="form-input text-xs"
                             required
                           />
@@ -1154,7 +1345,7 @@ export default function AdminModal({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="form-group !mb-0">
                           <label className="form-label">Harga (Rupiah) *</label>
                           <input
@@ -1171,13 +1362,77 @@ export default function AdminModal({
                           <label className="form-label">Nama Judul Game</label>
                           <input
                             type="text"
-                            placeholder="Contoh: Roblox / Mobile Legends / Steam"
+                            placeholder="Contoh: Roblox / Minecraft / Free Fire / MLBB"
                             value={productForm.game_title}
-                            onChange={(e) => setProductForm({ ...productForm, game_title: e.target.value })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const updated = { ...productForm, game_title: val };
+                              const detected = detectGameFromText((productForm.name || '') + ' ' + val);
+                              if (detected) {
+                                updated.image_url = detected.path;
+                              }
+                              setProductForm(updated);
+                            }}
                             className="form-input text-xs"
                           />
                         </div>
+
+                        <div className="form-group !mb-0">
+                          <label className="form-label flex items-center justify-between">
+                            <span>Stok Produk <span className="text-cyan-400 font-bold">(Maks 999+)</span></span>
+                            <span className="text-[10px] text-slate-400 font-normal">Tersedia</span>
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              max="9999"
+                              placeholder="999"
+                              value={productForm.stock !== undefined ? productForm.stock : 999}
+                              onChange={(e) => setProductForm({ ...productForm, stock: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                              className="form-input text-xs font-mono font-bold text-cyan-300"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setProductForm({ ...productForm, stock: 999 })}
+                              className="btn-secondary text-[10px] py-2 px-2 text-cyan-400 font-bold whitespace-nowrap"
+                              title="Set stok ke 999+"
+                            >
+                              999+
+                            </button>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Detected Game Auto-Upload Notification */}
+                      {(() => {
+                        const detected = detectGameFromText((productForm.name || '') + ' ' + (productForm.game_title || ''));
+                        if (!detected) return null;
+                        return (
+                          <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-400/40 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={detected.path || detected.dataUrl}
+                                alt={detected.label}
+                                className="w-10 h-10 object-contain rounded-lg border border-cyan-400/30 bg-slate-950 p-1"
+                                onError={(e) => { e.currentTarget.src = detected.dataUrl; }}
+                              />
+                              <div>
+                                <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <span>Foto Otomatis Terunggah ✓</span>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                                </div>
+                                <div className="text-xs font-heading font-black text-white">
+                                  {detected.label} ({detected.subLabel})
+                                </div>
+                              </div>
+                            </div>
+                            <span className="badge badge-emerald text-[10px] font-bold">
+                              {detected.key === 'roblox' ? 'Foto 1 (Roblox)' : detected.key === 'minecraft' ? 'Foto 2 (Minecraft)' : detected.key === 'freefire' ? 'Foto 3 (Free Fire)' : 'Foto 4 (Mobile Legends)'}
+                            </span>
+                          </div>
+                        );
+                      })()}
 
                       <div className="form-group !mb-0">
                         <label className="form-label">Gambar Produk (URL atau Upload Langsung)</label>
@@ -1442,6 +1697,393 @@ export default function AdminModal({
                     <span>Simpan Pengaturan Toko</span>
                   </button>
                 </form>
+              )}
+
+              {/* TAB: AKUN PENGGUNA & GAME GLOBAL (BISA DILIHAT OLEH PEMILIK STORE & OWNER) */}
+              {activeTab === 'users' && (
+                <div className="space-y-4 animate-fadeIn">
+                  
+                  {/* Header Bar */}
+                  <div className="p-4 rounded-2xl bg-slate-900/90 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-5 h-5 text-cyan-400" />
+                        <h4 className="font-heading font-black text-white text-base">
+                          Daftar Akun Pengguna & Game Terhubung
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Data email pengguna dan akun game (Roblox, Minecraft, Free Fire, Mobile Legends) yang terdeteksi seluruh dunia dapat dipantau langsung oleh Pemilik Store & Owner.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={loadUserProfiles}
+                        className="btn-secondary text-xs py-2 px-3 flex items-center gap-1.5 whitespace-nowrap"
+                        title="Muat Ulang Data Pengguna"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Refresh</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Cari berdasarkan Email, No WhatsApp, atau ID Game..."
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      className="form-input text-xs w-full pl-9"
+                    />
+                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    {userSearch && (
+                      <button
+                        onClick={() => setUserSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* User Cards List */}
+                  {(() => {
+                    const filtered = userProfiles.filter(p => {
+                      if (!userSearch.trim()) return true;
+                      const q = userSearch.toLowerCase();
+                      const emailMatch = p.email && p.email.toLowerCase().includes(q);
+                      const waMatch = p.whatsapp && p.whatsapp.includes(q);
+                      const robloxMatch = (typeof p.gameAccounts?.roblox === 'string' ? p.gameAccounts.roblox : p.gameAccounts?.roblox?.identifier)?.toLowerCase().includes(q);
+                      const mcMatch = (typeof p.gameAccounts?.minecraft === 'string' ? p.gameAccounts.minecraft : p.gameAccounts?.minecraft?.identifier)?.toLowerCase().includes(q);
+                      const ffMatch = (typeof p.gameAccounts?.freefire === 'string' ? p.gameAccounts.freefire : p.gameAccounts?.freefire?.identifier)?.toLowerCase().includes(q);
+                      const mlMatch = (typeof p.gameAccounts?.mobilelegends === 'string' ? p.gameAccounts.mobilelegends : (p.gameAccounts?.mobilelegends?.userId || p.gameAccounts?.mobilelegends?.identifier))?.toLowerCase().includes(q);
+                      return emailMatch || waMatch || robloxMatch || mcMatch || ffMatch || mlMatch;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-8 rounded-2xl bg-slate-900/50 border border-white/5 text-center text-slate-400 text-xs space-y-2">
+                          <Users className="w-8 h-8 text-slate-600 mx-auto" />
+                          <div className="font-bold text-white">Belum Ada Akun Pengguna Tersimpan</div>
+                          <p className="max-w-md mx-auto text-[11px] text-slate-500">
+                            Setiap kali pengguna memasukkan alamat email dan akun game di modal Akun Pengguna atau saat Checkout, datanya akan otomatis tersimpan dan muncul di sini untuk pemilik store & owner.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {filtered.map((user, idx) => {
+                          const robloxVal = typeof user.gameAccounts?.roblox === 'string' ? user.gameAccounts.roblox : user.gameAccounts?.roblox?.identifier;
+                          const mcVal = typeof user.gameAccounts?.minecraft === 'string' ? user.gameAccounts.minecraft : user.gameAccounts?.minecraft?.identifier;
+                          const ffVal = typeof user.gameAccounts?.freefire === 'string' ? user.gameAccounts.freefire : user.gameAccounts?.freefire?.identifier;
+                          const mlObj = user.gameAccounts?.mobilelegends;
+                          const mlVal = typeof mlObj === 'string' ? mlObj : mlObj?.userId || mlObj?.identifier;
+                          const mlZone = typeof mlObj === 'object' ? mlObj?.zoneId : '';
+
+                          return (
+                            <div
+                              key={user.email || user.whatsapp || idx}
+                              className="p-4 rounded-2xl bg-slate-900/90 border border-white/10 hover:border-cyan-400/40 transition space-y-3"
+                            >
+                              {/* Header User */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                                    {user.email ? <Mail className="w-5 h-5" /> : <User className="w-5 h-5" />}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-heading font-black text-white text-sm">
+                                        {user.email || '(Tanpa Email / Mode Tamu)'}
+                                      </span>
+                                      {user.email ? (
+                                        <span className="badge badge-emerald text-[9px]">Email Terverifikasi ✓</span>
+                                      ) : (
+                                        <span className="badge badge-amber text-[9px]">Mode Tamu</span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-slate-400 flex items-center gap-3 mt-0.5">
+                                      {user.whatsapp && <span>WA: <strong className="text-slate-200">{user.whatsapp}</strong></span>}
+                                      {user.updatedAt && (
+                                        <span className="text-[10px] text-slate-500">
+                                          Update: {new Date(user.updatedAt).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Action buttons */}
+                                <div className="flex items-center gap-2 self-end sm:self-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingUserProfile(user)}
+                                    className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 font-bold"
+                                    title="Lihat Profil Game Lengkap Pengguna ini"
+                                  >
+                                    <Globe2 className="w-3.5 h-3.5 text-slate-950" />
+                                    <span>Lihat Profil Game</span>
+                                  </button>
+
+                                  {user.whatsapp && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const clean = user.whatsapp.replace(/[^0-9]/g, '');
+                                        const phone = clean.startsWith('0') ? '62' + clean.slice(1) : clean;
+                                        window.open(`https://wa.me/${phone}?text=${encodeURIComponent('Halo kak, kami dari Zhafranstore.id...')}`, '_blank');
+                                      }}
+                                      className="btn-whatsapp text-xs py-1.5 px-2.5 rounded-lg flex items-center gap-1"
+                                      title="Chat WhatsApp Pengguna"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                      <span>Chat WA</span>
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteUserProfile(user.email || user.whatsapp)}
+                                    className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"
+                                    title="Hapus Pengguna ini"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* 4 Game Accounts Grid */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                                
+                                {/* Roblox */}
+                                <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 ${
+                                  robloxVal ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-950/40 border-white/5 opacity-60'
+                                }`}>
+                                  <img 
+                                    src={GAME_ASSETS.roblox.path} 
+                                    alt="Roblox" 
+                                    className="w-7 h-7 object-contain rounded-lg bg-slate-950 p-0.5 border border-amber-400/30"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.roblox.dataUrl; }}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[10px] text-amber-400 font-bold uppercase">Foto 1 (Roblox)</div>
+                                    <div className="font-bold text-white truncate text-xs">
+                                      {robloxVal || 'Belum diisi'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Minecraft */}
+                                <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 ${
+                                  mcVal ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-slate-950/40 border-white/5 opacity-60'
+                                }`}>
+                                  <img 
+                                    src={GAME_ASSETS.minecraft.path} 
+                                    alt="Minecraft" 
+                                    className="w-7 h-7 object-contain rounded-lg bg-slate-950 p-0.5 border border-emerald-500/30"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.minecraft.dataUrl; }}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[10px] text-emerald-400 font-bold uppercase">Foto 2 (Minecraft)</div>
+                                    <div className="font-bold text-white truncate text-xs">
+                                      {mcVal || 'Belum diisi'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Free Fire */}
+                                <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 ${
+                                  ffVal ? 'bg-orange-950/20 border-orange-500/30' : 'bg-slate-950/40 border-white/5 opacity-60'
+                                }`}>
+                                  <img 
+                                    src={GAME_ASSETS.freefire.path} 
+                                    alt="Free Fire" 
+                                    className="w-7 h-7 object-contain rounded-lg bg-slate-950 p-0.5 border border-orange-500/30"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.freefire.dataUrl; }}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[10px] text-orange-400 font-bold uppercase">Foto 3 (Free Fire)</div>
+                                    <div className="font-bold text-white truncate text-xs">
+                                      {ffVal || 'Belum diisi'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Mobile Legends */}
+                                <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 ${
+                                  mlVal ? 'bg-cyan-950/20 border-cyan-500/30' : 'bg-slate-950/40 border-white/5 opacity-60'
+                                }`}>
+                                  <img 
+                                    src={GAME_ASSETS.mobilelegends.path} 
+                                    alt="Mobile Legends" 
+                                    className="w-7 h-7 object-contain rounded-lg bg-slate-950 p-0.5 border border-cyan-400/30"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.mobilelegends.dataUrl; }}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[10px] text-cyan-400 font-bold uppercase">Foto 4 (MLBB)</div>
+                                    <div className="font-bold text-white truncate text-xs">
+                                      {mlVal ? `${mlVal} ${mlZone ? '(' + mlZone + ')' : ''}` : 'Belum diisi'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+                </div>
+              )}
+
+              {/* Modal Viewer: Profil Game Lengkap Pengguna */}
+              {viewingUserProfile && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+                  <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                    <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Globe2 className="w-5 h-5 text-cyan-400" />
+                        <h4 className="font-heading font-black text-white text-sm sm:text-base">
+                          Profil Game Global: {viewingUserProfile.email || viewingUserProfile.whatsapp || 'Pengguna'}
+                        </h4>
+                      </div>
+                      <button
+                        onClick={() => setViewingUserProfile(null)}
+                        className="text-slate-400 hover:text-white p-1"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 overflow-y-auto space-y-3 flex-1">
+                      {(() => {
+                        const rId = typeof viewingUserProfile.gameAccounts?.roblox === 'string' ? viewingUserProfile.gameAccounts.roblox : viewingUserProfile.gameAccounts?.roblox?.identifier;
+                        const mId = typeof viewingUserProfile.gameAccounts?.minecraft === 'string' ? viewingUserProfile.gameAccounts.minecraft : viewingUserProfile.gameAccounts?.minecraft?.identifier;
+                        const fId = typeof viewingUserProfile.gameAccounts?.freefire === 'string' ? viewingUserProfile.gameAccounts.freefire : viewingUserProfile.gameAccounts?.freefire?.identifier;
+                        const mlObj = viewingUserProfile.gameAccounts?.mobilelegends;
+                        const mlId = typeof mlObj === 'string' ? mlObj : mlObj?.userId || mlObj?.identifier;
+                        const mlZone = typeof mlObj === 'object' ? mlObj?.zoneId : '';
+
+                        const robloxProf = rId ? detectWorldwideAccount('roblox', rId) : null;
+                        const mcProf = mId ? detectWorldwideAccount('minecraft', mId) : null;
+                        const ffProf = fId ? detectWorldwideAccount('freefire', fId) : null;
+                        const mlProf = mlId ? detectWorldwideAccount('mobilelegends', mlId, mlZone) : null;
+
+                        const anyLinked = robloxProf || mcProf || ffProf || mlProf;
+
+                        if (!anyLinked) {
+                          return (
+                            <div className="p-6 text-center text-slate-400 text-xs">
+                              Pengguna ini belum menautkan ID game ke akunnya.
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-3">
+                            <div className="p-3 rounded-xl bg-slate-950/60 border border-white/5 flex items-center justify-between text-xs">
+                              <span className="text-slate-400">Status Akun Terdeteksi:</span>
+                              <span className="badge badge-cyan text-[10px] font-bold">
+                                {[robloxProf, mcProf, ffProf, mlProf].filter(Boolean).length} dari 4 Game Terhubung Seluruh Dunia 🌐
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {/* 1. Roblox */}
+                              {robloxProf ? (
+                                <GameProfileCard profile={robloxProf} />
+                              ) : (
+                                <div className="p-3.5 rounded-2xl border border-white/5 bg-slate-950/40 flex items-center gap-3 opacity-60">
+                                  <img 
+                                    src={GAME_ASSETS.roblox.path} 
+                                    alt="Roblox" 
+                                    className="w-10 h-10 object-contain rounded-lg bg-slate-950 p-1 border border-amber-400/20"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.roblox.dataUrl; }}
+                                  />
+                                  <div>
+                                    <div className="text-[10px] text-amber-400 font-bold uppercase">Foto 1 • Roblox</div>
+                                    <div className="text-xs text-slate-400 italic">Belum ditautkan akun Roblox</div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 2. Minecraft */}
+                              {mcProf ? (
+                                <GameProfileCard profile={mcProf} />
+                              ) : (
+                                <div className="p-3.5 rounded-2xl border border-white/5 bg-slate-950/40 flex items-center gap-3 opacity-60">
+                                  <img 
+                                    src={GAME_ASSETS.minecraft.path} 
+                                    alt="Minecraft" 
+                                    className="w-10 h-10 object-contain rounded-lg bg-slate-950 p-1 border border-emerald-500/20"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.minecraft.dataUrl; }}
+                                  />
+                                  <div>
+                                    <div className="text-[10px] text-emerald-400 font-bold uppercase">Foto 2 • Minecraft</div>
+                                    <div className="text-xs text-slate-400 italic">Belum ditautkan akun Minecraft</div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 3. Free Fire */}
+                              {ffProf ? (
+                                <GameProfileCard profile={ffProf} />
+                              ) : (
+                                <div className="p-3.5 rounded-2xl border border-white/5 bg-slate-950/40 flex items-center gap-3 opacity-60">
+                                  <img 
+                                    src={GAME_ASSETS.freefire.path} 
+                                    alt="Free Fire" 
+                                    className="w-10 h-10 object-contain rounded-lg bg-slate-950 p-1 border border-orange-500/20"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.freefire.dataUrl; }}
+                                  />
+                                  <div>
+                                    <div className="text-[10px] text-orange-400 font-bold uppercase">Foto 3 • Free Fire</div>
+                                    <div className="text-xs text-slate-400 italic">Belum ditautkan Player ID Free Fire</div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 4. Mobile Legends */}
+                              {mlProf ? (
+                                <GameProfileCard profile={mlProf} />
+                              ) : (
+                                <div className="p-3.5 rounded-2xl border border-white/5 bg-slate-950/40 flex items-center gap-3 opacity-60">
+                                  <img 
+                                    src={GAME_ASSETS.mobilelegends.path} 
+                                    alt="Mobile Legends" 
+                                    className="w-10 h-10 object-contain rounded-lg bg-slate-950 p-1 border border-cyan-400/20"
+                                    onError={(e) => { e.currentTarget.src = GAME_ASSETS.mobilelegends.dataUrl; }}
+                                  />
+                                  <div>
+                                    <div className="text-[10px] text-cyan-400 font-bold uppercase">Foto 4 • Mobile Legends</div>
+                                    <div className="text-xs text-slate-400 italic">Belum ditautkan User ID MLBB</div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="p-3 border-t border-white/10 flex justify-end">
+                      <button
+                        onClick={() => setViewingUserProfile(null)}
+                        className="btn-secondary text-xs py-2 px-4"
+                      >
+                        Tutup
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
 
             </div>

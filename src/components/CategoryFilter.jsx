@@ -11,7 +11,7 @@ export default function CategoryFilter({
 }) {
   const dynamicCategories = [
     { id: "all", label: "Semua Produk", icon: Layers, count: counts.all || 0 },
-    ...categories.map(c => ({
+    ...(Array.isArray(categories) ? categories : []).map(c => ({
       id: c.id,
       label: c.name,
       icon: c.id === 'gamepass' ? Zap : c.id === 'game' ? Gamepad2 : Tag,

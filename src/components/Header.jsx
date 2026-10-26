@@ -11,7 +11,8 @@ import {
   Download,
   Smartphone,
   Sparkles,
-  Mail
+  Mail,
+  User
 } from 'lucide-react';
 
 export default function Header({ 
@@ -21,7 +22,9 @@ export default function Header({
   onOpenTracker, 
   onOpenChallenge,
   onOpenHelp,
-  storeSettings 
+  storeSettings,
+  userProfile,
+  onOpenUserAccount
 }) {
   const adminWhatsApp = storeSettings?.admin_whatsapp || "082542778554";
   const adminEmail = storeSettings?.admin_email || "zhafran.gibran09@gmail.com";
@@ -175,6 +178,28 @@ export default function Header({
           >
             <span>🎁</span>
             <span className="hidden xs:inline">Event & Verifikasi</span>
+          </button>
+
+          {/* Akun Email / Tamu & Akun Game Dunia */}
+          <button
+            onClick={onOpenUserAccount}
+            className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-[11px] sm:text-xs font-bold transition shadow-sm ${
+              userProfile?.email
+                ? 'bg-cyan-500/15 hover:bg-cyan-500/25 border-cyan-400/40 text-cyan-300'
+                : 'bg-slate-800/80 hover:bg-slate-700/80 border-white/10 text-slate-200 hover:text-white'
+            }`}
+            title="Kelola Akun Email / Mode Tamu & Simpan ID Game Seluruh Dunia"
+          >
+            <User className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">
+              {userProfile?.email ? userProfile.email.split('@')[0] : (userProfile?.isGuest ? 'Mode Tamu' : 'Akun / Tamu')}
+            </span>
+            <span className="sm:hidden">
+              {userProfile?.email ? 'Akun' : 'Tamu'}
+            </span>
+            {userProfile?.email && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            )}
           </button>
 
           {/* Lacak Pesanan */}

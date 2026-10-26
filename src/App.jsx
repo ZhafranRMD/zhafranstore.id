@@ -9,6 +9,7 @@ import OrderTrackerModal from './components/OrderTrackerModal.jsx';
 import ChallengeModal from './components/ChallengeModal.jsx';
 import OrderChatModal from './components/OrderChatModal.jsx';
 import HelpModal from './components/HelpModal.jsx';
+import UserAccountModal from './components/UserAccountModal.jsx';
 import Toast from './components/Toast.jsx';
 import { storeService } from './services/storeService.js';
 import { initialProducts, initialStoreSettings, initialCategories } from './data/initialProducts.js';
@@ -38,7 +39,8 @@ export default function App() {
 
   const [categories, setCategories] = useState(() => {
     try {
-      return storeService.getCategories();
+      const cached = localStorage.getItem('zhafranstore_categories');
+      return cached ? JSON.parse(cached) : initialCategories;
     } catch {
       return initialCategories;
     }
@@ -66,6 +68,10 @@ export default function App() {
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
   const [isChallengeOpen, setIsChallengeOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isUserAccountOpen, setIsUserAccountOpen] = useState(false);
+
+  // User Account Profile (Email or Guest, with Worldwide Game Accounts)
+  const [userProfile, setUserProfile] = useState(() => storeService.getUserProfile());
 
   // Order Chat Room & App Delivery
   const [activeChatOrder, setActiveChatOrder] = useState(null);
@@ -94,7 +100,7 @@ export default function App() {
       ]);
       if (prods && prods.length > 0) setProducts(prods);
       if (settings) setStoreSettings(settings);
-      const cats = storeService.getCategories();
+      const cats = await storeService.getCategories();
       if (cats && cats.length > 0) setCategories(cats);
     } catch (e) {
       console.warn("Background sync note:", e);
@@ -103,7 +109,7 @@ export default function App() {
 
   // Filtered & Sorted Products
   const filteredProducts = useMemo(() => {
-    let result = [...products];
+    let result = Array.isArray(products) ? [...products] : [];
 
     // Category filter
     if (activeCategory !== 'all') {
@@ -138,10 +144,12 @@ export default function App() {
 
   // Product Counts (Dynamic across all categories)
   const counts = useMemo(() => {
-    const map = { all: products.length };
-    categories.forEach(cat => {
-      map[cat.id] = products.filter(p => p.category === cat.id).length;
-    });
+    const map = { all: (products && products.length) || 0 };
+    if (Array.isArray(categories)) {
+      categories.forEach(cat => {
+        map[cat.id] = (Array.isArray(products) ? products : []).filter(p => p.category === cat.id).length;
+      });
+    }
     return map;
   }, [products, categories]);
 
@@ -161,6 +169,8 @@ export default function App() {
         onOpenChallenge={() => setIsChallengeOpen(true)}
         onOpenHelp={() => setIsHelpOpen(true)}
         storeSettings={storeSettings}
+        userProfile={userProfile}
+        onOpenUserAccount={() => setIsUserAccountOpen(true)}
       />
 
       {/* Main Container */}
@@ -297,6 +307,8 @@ export default function App() {
         isOpen={!!checkoutProduct}
         onClose={() => setCheckoutProduct(null)}
         storeSettings={storeSettings}
+        userProfile={userProfile}
+        onOpenUserAccount={() => setIsUserAccountOpen(true)}
         onOrderSuccess={(order) => {
           showToast(`Pesanan ${order.id} berhasil dibuat!`);
         }}
@@ -364,6 +376,18 @@ export default function App() {
             setIsTrackerOpen(true);
           }
         }}
+      />
+
+      {/* User Account & Worldwide Game Accounts Modal */}
+      <UserAccountModal
+        isOpen={isUserAccountOpen}
+        onClose={() => setIsUserAccountOpen(false)}
+        userProfile={userProfile}
+        onProfileUpdated={(updated) => {
+          setUserProfile(updated);
+          showToast("Profil akun & akun game berhasil disimpan!");
+        }}
+        showToast={showToast}
       />
 
       {/* Toast Notification */}

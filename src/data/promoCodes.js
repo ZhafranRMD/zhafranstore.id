@@ -27,10 +27,8 @@ export const promoCodes = {
   }
 };
 
-export const OWNER_THEBEST_CODE = "ownerthebest";
-
 export const validAdminCodes = [
-  "zhafranstoreindonesia",
+  "zhafranstoreid",
   "indonesiastore",
   "konhacestore",
   "capiy142owner",
@@ -41,9 +39,6 @@ export const validAdminCodes = [
 export function getAuthRole(inputCode) {
   if (!inputCode) return null;
   const clean = inputCode.trim().toLowerCase();
-  if (clean === OWNER_THEBEST_CODE) {
-    return 'owner_thebest';
-  }
   if (validAdminCodes.includes(clean)) {
     return 'admin_kepemilikan';
   }
