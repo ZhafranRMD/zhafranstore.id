@@ -19,32 +19,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" crossorigin href="./assets/index-Cir_mYkx.css">
-    <link rel="stylesheet" crossorigin href="./dist/assets/index-Cir_mYkx.css">
   </head>
   <body class="bg-[#07090E] text-slate-100 antialiased selection:bg-cyan-500 selection:text-black">
     <div id="root"></div>
-    <script type="module">
-      // Auto-detect environment: Live Server / Static preview vs Vite Dev Server
-      (function() {
-        const isVite = window.location.port === '5173' || window.__vite_plugin_react_preamble_installed__;
-        if (isVite) {
-          import('./src/main.jsx').catch(console.error);
-        } else {
-          const s = document.createElement('script');
-          s.type = 'module';
-          s.crossOrigin = 'anonymous';
-          s.src = './assets/index-Bhe1LfUq.js';
-          s.onerror = () => {
-            const fallback = document.createElement('script');
-            fallback.type = 'module';
-            fallback.crossOrigin = 'anonymous';
-            fallback.src = './dist/assets/index-Bhe1LfUq.js';
-            document.body.appendChild(fallback);
-          };
-          document.body.appendChild(s);
-        }
-      })();
-    </script>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
